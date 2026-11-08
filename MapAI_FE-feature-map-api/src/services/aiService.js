@@ -7,7 +7,7 @@ import { request } from './api';
  * @param {string} userInput - Câu lệnh của người dùng
  * @param {Array} chatHistory - Lịch sử trò chuyện
  */
-export const askMapAI = async (userInput, chatHistory = []) => {
+export const askMapAI = async (userInput, chatHistory = [], selectedLocation = null) => {
   try {
     // Gọi đến API của Backend: /api/ai/ask
     const response = await request('/ai/ask', {
@@ -15,9 +15,10 @@ export const askMapAI = async (userInput, chatHistory = []) => {
       body: JSON.stringify({
         userInput,
         chatHistory: chatHistory.map(msg => ({
-          role: msg.type === 'ai' ? 'assistant' : 'user',
-          content: msg.text
-        }))
+          role: msg.type === 'ai' ? 'model' : 'user',
+          text: msg.text
+        })),
+        selectedLocation,
       })
     });
 

@@ -43,6 +43,35 @@ namespace MapAI.API.Controllers
             }
         }
 
+        [HttpGet("categories")]
+        public IActionResult Categories() => Ok(MapPlaceCategories.All.Select(category => new { category.Id, category.Name }));
+
+        [HttpGet("places")]
+        public Task<IActionResult> FindPlaces([FromQuery] MapPlaceQuery request, CancellationToken cancellationToken) =>
+            ExecutePlaceTool(() => _mapService.FindPlacesAsync(request, cancellationToken));
+
+        [HttpGet("nearest")]
+        public Task<IActionResult> FindNearest([FromQuery] MapPlaceQuery request, CancellationToken cancellationToken)
+        {
+            request.Limit = 1;
+            return ExecutePlaceTool(() => _mapService.FindPlacesAsync(request, cancellationToken));
+        }
+
+        [HttpPost("nearest/direction")]
+        public Task<IActionResult> DirectionToNearest([FromBody] NearestDirectionRequest request, CancellationToken cancellationToken) =>
+            ExecutePlaceTool(() => _mapService.GetNearestDirectionAsync(request, cancellationToken));
+
+        private async Task<IActionResult> ExecutePlaceTool<T>(Func<Task<T>> action)
+        {
+            try { return Ok(await action()); }
+            catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+            catch (HttpRequestException error)
+            {
+                _logger.LogWarning(error, "Map place tool source unavailable");
+                return StatusCode(503, new { message = "Nguồn dữ liệu bản đồ đang không khả dụng. Vui lòng thử lại sau." });
+            }
+        }
+
         [HttpPost("direction")]
         public async Task<IActionResult> GetDirection([FromBody] OsmRouteRequest request)
         {

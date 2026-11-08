@@ -85,11 +85,9 @@ export const adminApi = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://localhost:7028/api/v1'}/location/upload-thumbnail`, {
+    const response = await request('/location/upload-thumbnail', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-      },
+      headers: { 'Content-Type': undefined },
       body: formData
     });
 

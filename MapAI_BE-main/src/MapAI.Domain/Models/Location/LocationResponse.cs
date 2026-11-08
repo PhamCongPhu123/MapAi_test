@@ -20,5 +20,8 @@ namespace MapAI.Domain.Models.Location
         public string? Category { get; set; }
         public string? Tags { get; set; }
         public List<string>? Images { get; set; }
+        public double? CommunityRating { get; set; }
+        public int CommunityReviewCount { get; set; }
+        public bool IsUserContribution { get; set; }
     }
 }

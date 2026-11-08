@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { GoogleLogin } from "@react-oauth/google";
+import { canUseGoogleWebLogin } from '../config/platform';
 import { 
   Mail, 
   Lock, 
@@ -29,7 +30,10 @@ export default function Login() {
   const location = useLocation();
 
   // Get the page user was trying to access before being redirected to login
-  const from = location.state?.from?.pathname || "/";
+  const requestedLocation = location.state?.from;
+  const from = requestedLocation
+    ? `${requestedLocation.pathname}${requestedLocation.search || ''}${requestedLocation.hash || ''}`
+    : '/';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -111,17 +115,17 @@ export default function Login() {
             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/40 to-transparent"></div>
             
             <div className="space-y-5">
-              <div className="flex justify-center w-full">
+              {canUseGoogleWebLogin && <div className="flex justify-center w-full overflow-hidden">
                 <GoogleLogin
                   onSuccess={handleGoogleSuccess}
                   onError={handleGoogleError}
                   useOneTap
                   use_fedcm_for_prompt={false}
                   theme="filled_blue"
-                  width="350px"
+                  width="280px"
                  shape="pill"
                 />
-              </div>
+              </div>}
 
               <div className="relative flex items-center">
                 <div className="flex-grow border-t border-white/5"></div>
@@ -147,7 +151,10 @@ export default function Login() {
                   <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                     <input
-                      type="text"
+                      type="email"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      inputMode="email"
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -160,6 +167,7 @@ export default function Login() {
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                     <input
                       type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}

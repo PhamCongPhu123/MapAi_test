@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
 
 namespace MapAI.Domain.Models.Ai
 {
@@ -15,6 +16,13 @@ namespace MapAI.Domain.Models.Ai
 
         [JsonPropertyName("search_query")]
         public string? SearchQuery { get; set; }
+
+        [JsonPropertyName("radius_meters")]
+        public int? RadiusMeters { get; set; }
+        [JsonPropertyName("travel_mode")]
+        public string? TravelMode { get; set; }
+        [JsonPropertyName("reference_location")]
+        public string? ReferenceLocation { get; set; }
     }
 
     public class PlaceDetailResponse
@@ -60,7 +68,9 @@ namespace MapAI.Domain.Models.Ai
 
     public class AiRequest
     {
+        [Required, StringLength(2000)]
         public string UserInput { get; set; } = string.Empty;
         public List<ChatMessage> ChatHistory { get; set; } = new();
+        public AiLocation? SelectedLocation { get; set; }
     }
 }

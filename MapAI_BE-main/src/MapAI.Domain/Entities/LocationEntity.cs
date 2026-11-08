@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using MapAI.Domain.Common;
+using MapAI.Domain.Enums;
 
 namespace MapAI.Domain.Entities
 {
@@ -43,5 +44,15 @@ namespace MapAI.Domain.Entities
 
         // Flexible data for other API-specific fields
         public string? RawDataJson { get; set; } 
+
+        public LocationStatus Status { get; set; } = LocationStatus.Approved;
+        public bool IsUserContribution { get; set; }
+        public string? SubmittedById { get; set; }
+        public UserEntity? SubmittedBy { get; set; }
+        [MaxLength(500)]
+        public string? ModerationNote { get; set; }
+        public string? ModeratedById { get; set; }
+        public UserEntity? ModeratedBy { get; set; }
+        public DateTimeOffset? ModeratedAt { get; set; }
     }
 }

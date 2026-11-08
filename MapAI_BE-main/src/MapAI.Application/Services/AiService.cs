@@ -27,14 +27,18 @@ namespace MapAI.Application.Services
             try
             {
                 // TẦNG 1: ROUTER - Phân loại ý định
-                var routerJson = await _aiRepository.CallGeminiAsync(
-                    AiPrompt.ROUTER_SYSTEM_PROMPT,
-                    AiPrompt.ROUTER_SCHEMA,
-                    request.UserInput,
-                    request.ChatHistory
-                );
+                var route = MapCommandRouter.TryParse(request.UserInput);
+                if (route == null)
+                {
+                    var routerJson = await _aiRepository.CallGeminiAsync(
+                        AiPrompt.ROUTER_SYSTEM_PROMPT,
+                        AiPrompt.ROUTER_SCHEMA,
+                        request.UserInput,
+                        request.ChatHistory
+                    );
 
-                var route = JsonSerializer.Deserialize<RouterResponse>(routerJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    route = JsonSerializer.Deserialize<RouterResponse>(routerJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
 
                 if (route == null)
                 {
@@ -88,6 +92,52 @@ namespace MapAI.Application.Services
         {
             var type = route.ActionType;
 
+            var cameraActions = new Dictionary<string, string>
+            {
+                ["ZoomIn"] = "ZOOM_IN", ["ZoomOut"] = "ZOOM_OUT", ["Locate"] = "LOCATE_USER",
+                ["ResetNorth"] = "RESET_NORTH", ["ClearResults"] = "CLEAR_RESULTS", ["ClearRoute"] = "CLEAR_ROUTE"
+            };
+            if (type != null && cameraActions.TryGetValue(type, out var cameraAction))
+                return new() { Message = "Đang thực hiện thao tác trên bản đồ.", Action = new() { Type = cameraAction } };
+
+            if (type == "DirectionSelected")
+            {
+                var selected = request.SelectedLocation;
+                if (selected == null || !MapDistance.Valid(selected.Lat, selected.Lng))
+                    return new() { Message = "Bạn hãy tìm hoặc chọn một địa điểm trước khi yêu cầu chỉ đường đến đó." };
+                return new() { Message = $"Đang thiết lập chỉ đường đến {selected.Name}.", Action = new() { Type = "SET_DIRECTION", Destination = selected } };
+            }
+
+            if (type is "Nearest" or "NearestDirection" or "Around" || (type == "Nearby" && MapPlaceCategories.Find(route.SearchQuery) != null))
+            {
+                var category = MapPlaceCategories.Find(route.SearchQuery);
+                if (category == null) return new() { Message = "Bạn muốn tìm cây xăng, ATM, nhà thuốc, bệnh viện, quán ăn, cà phê, bãi đỗ xe hay trạm sạc?" };
+                var radius = route.RadiusMeters ?? 5000;
+                if (radius is < 100 or > 20000) return new() { Message = "Bạn hãy chọn bán kính từ 100 m đến 20 km để tìm địa điểm." };
+                var mode = route.TravelMode ?? "driving";
+                if (mode is not ("driving" or "bicycle" or "foot")) return new() { Message = "Bạn muốn đi ô tô, xe đạp hay đi bộ?" };
+                if (type == "Around" && string.IsNullOrWhiteSpace(route.ReferenceLocation))
+                    return new() { Message = "Bạn muốn tìm quanh địa điểm nào? Hãy cho biết tên trung tâm tìm kiếm." };
+                AiLocation? center = null;
+                if (!string.IsNullOrWhiteSpace(route.ReferenceLocation))
+                {
+                    var locations = await _mapService.SearchLocationsAsync(route.ReferenceLocation);
+                    var reference = locations?.FirstOrDefault();
+                    if (reference == null || !double.TryParse(reference.Lat, CultureInfo.InvariantCulture, out var lat)
+                        || !double.TryParse(reference.Lon, CultureInfo.InvariantCulture, out var lng) || !MapDistance.Valid(lat, lng))
+                        return new() { Message = "Chưa xác định được vị trí trung tâm bạn yêu cầu. Hãy thử tên địa điểm cụ thể hơn." };
+                    center = new() { Name = reference.DisplayName, Lat = lat, Lng = lng };
+                }
+                if (type == "NearestDirection" && center != null)
+                    return new() { Message = "Để chỉ đường đến nơi gần nhất quanh một địa điểm khác, bạn hãy tìm quanh địa điểm đó trước, rồi chọn kết quả để chỉ đường." };
+                return new()
+                {
+                    Message = center == null ? $"Đang tìm {category.Name.ToLowerInvariant()} trong bán kính {radius / 1000.0:0.#} km từ vị trí của bạn." : $"Đang tìm {category.Name.ToLowerInvariant()} quanh {center.Name}.",
+                    Action = new() { Type = type == "NearestDirection" ? "ROUTE_TO_NEAREST" : type == "Nearest" ? "NEAREST_SEARCH" : "SEARCH_POIS", Value = new { category = category.Id, radius, mode, center } },
+                    Suggestions = ["Chỉ đường đến đó", "Phóng to bản đồ", "Xóa kết quả tìm kiếm"]
+                };
+            }
+
             // Chuyển 2D/3D
             if (type == "2D" || type == "3D")
             {
@@ -107,7 +157,7 @@ namespace MapAI.Application.Services
                 {
                     Message = type == "Nearby" 
                         ? $"Dạ, MapAI đang tìm kiếm các **{query}** ở gần bạn đây ạ!" 
-                        : $"Dạ, đây là danh sách các **{query}** tại Đà Nẵng mà MapAI tìm được cho bạn ạ!",
+                        : $"Đang tìm kiếm các **{query}** tại Đà Nẵng.",
                     Action = new AiAction 
                     { 
                         Type = type == "Nearby" ? "NEARBY_SEARCH" : "CITY_SEARCH", 
@@ -178,7 +228,7 @@ namespace MapAI.Application.Services
 
                     return new AiFinalResponse
                     {
-                        Message = $"MapAI đã chuẩn bị tuyến đường tới **{bestMatch.DisplayName}** cho mình rồi ạ. Bạn nhấn 'Bắt đầu' để đi nhé!",
+                        Message = $"Đã xác định vị trí **{bestMatch.DisplayName}**. Đang thiết lập chỉ đường; bạn có thể xem lộ trình sau khi tuyến được tính.",
                         Action = new AiAction
                         {
                             Type = "SET_DIRECTION",

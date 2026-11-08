@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, MapPin, Phone, Globe, Clock, Image as ImageIcon, ExternalLink, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
+import LocationReviews from './Community/LocationReviews';
 
 const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   
-  const photos = place.photos && place.photos.length > 0 ? place.photos : [place.thumbnail || 'https://images.unsplash.com/photo-1518005020951-eccb494ad742?auto=format&fit=crop&q=80&w=800'];
+  const photos = place.photos?.length ? place.photos : place.thumbnail ? [place.thumbnail] : [];
 
   useEffect(() => {
     if (photos.length <= 1) return;
@@ -37,14 +38,14 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
   if (!place) return null;
 
   return (
-    <div className="absolute top-0 bottom-0 right-40 w-[450px] pointer-events-none flex items-start justify-center pt-12 z-[100] perspective-[2000px]">
+    <div className="place-detail-container absolute top-0 bottom-0 right-40 w-[450px] pointer-events-none flex items-start justify-center pt-12 z-[100] perspective-[2000px]">
       <motion.div
         initial={{ opacity: 0, x: 100, rotateY: -20, scale: 0.9 }}
         animate={{ opacity: 1, x: 0, rotateY: -10, scale: 1 }}
         exit={{ opacity: 0, x: 100, rotateY: -20, scale: 0.9 }}
         whileHover={{ rotateY: -5, x: -15, transition: { duration: 0.4 } }}
         transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-        className="pointer-events-auto w-[360px] h-[75vh] bg-slate-950/60 backdrop-blur-2xl border border-white/20 rounded-[2.5rem] shadow-[0_50px_100px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] overflow-hidden flex flex-col relative"
+        className="place-detail-card pointer-events-auto w-[360px] h-[75dvh] bg-slate-950/60 backdrop-blur-2xl border border-white/20 rounded-[2.5rem] shadow-[0_50px_100px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] overflow-hidden flex flex-col relative"
       >
         {/* Glow Effects */}
         <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/20 blur-[80px] pointer-events-none"></div>
@@ -60,9 +61,10 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.8, ease: "circOut" }}
               className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${photos[currentImageIndex]})` }}
+              style={{ backgroundImage: photos.length ? `url(${photos[currentImageIndex]})` : 'none' }}
             />
           </AnimatePresence>
+          {!photos.length && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500"><MapPin size={40} /><span className="text-xs">Chưa có ảnh địa điểm</span></div>}
           
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent"></div>
           
@@ -119,7 +121,7 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 space-y-8 custom-scrollbar transition-all">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-6 custom-scrollbar transition-all">
           <div className="p-5 rounded-3xl bg-white/[0.03] border border-white/10 relative overflow-hidden group">
             <div className="absolute top-0 left-0 w-0.5 h-full bg-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
             <p className="text-xs text-slate-300 leading-relaxed font-medium">
@@ -130,8 +132,8 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 bg-slate-900/40 border border-white/5 rounded-2xl flex flex-col items-center justify-center text-center group hover:border-blue-500/20 transition-colors">
               <Star size={16} className="text-amber-400 mb-2" fill="currentColor" />
-              <span className="text-sm font-black text-white">{place.rating}</span>
-              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-1">Rating</span>
+              <span className="text-sm font-black text-white">{place.rating ?? 'Chưa có'}</span>
+              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-1">Điểm từ nguồn ban đầu</span>
             </div>
             <div className="p-4 bg-slate-900/40 border border-white/5 rounded-2xl flex flex-col items-center justify-center text-center group hover:border-blue-500/20 transition-colors">
               <ImageIcon size={16} className="text-blue-400 mb-2" />
@@ -149,18 +151,13 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
               </div>
             </div>
 
-            <div className="flex items-center gap-4 p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-all cursor-pointer group">
-              <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400 group-hover:scale-110 transition-transform"><Clock size={18} /></div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Giờ mở cửa</p>
-                <p className="text-[10px] font-bold text-white">Đang mở cửa • Đến 22:00</p>
-              </div>
-            </div>
+            <p className="text-xs text-slate-400">{place.isUserContribution ? 'Địa điểm do cộng đồng đóng góp, đã được quản trị viên duyệt.' : 'Địa điểm trong dữ liệu MapAI.'}</p>
           </div>
+          {place.id && <LocationReviews key={place.id} locationId={place.id} />}
         </div>
 
         {/* Footer Actions */}
-        <div className="p-8 pt-4 bg-slate-950/80 border-t border-white/10">
+        <div className="shrink-0 p-4 bg-slate-950/80 border-t border-white/10">
           <div className="flex gap-3">
             <motion.button 
               onClick={() => onStartDirections && onStartDirections(place)}

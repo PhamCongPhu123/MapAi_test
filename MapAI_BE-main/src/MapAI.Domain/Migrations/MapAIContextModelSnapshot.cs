@@ -80,11 +80,24 @@ namespace MapAI.Domain.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsUserContribution")
+                        .HasColumnType("boolean");
+
                     b.Property<double>("Latitude")
                         .HasColumnType("double precision");
 
                     b.Property<double>("Longitude")
                         .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset?>("ModeratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModeratedById")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ModerationNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
@@ -99,6 +112,12 @@ namespace MapAI.Domain.Migrations
                         .HasColumnType("double precision");
 
                     b.Property<string>("RawDataJson")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubmittedById")
                         .HasColumnType("text");
 
                     b.Property<string>("Tags")
@@ -123,7 +142,56 @@ namespace MapAI.Domain.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ModeratedById");
+
+                    b.HasIndex("SubmittedById");
+
+                    b.HasIndex("Status", "CreatedAt");
+
                     b.ToTable("Locations");
+                });
+
+            modelBuilder.Entity("MapAI.Domain.Entities.LocationReviewEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LocationId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("LocationId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("LocationReviews", t =>
+                        {
+                            t.HasCheckConstraint("CK_LocationReviews_Rating", "\"Rating\" BETWEEN 1 AND 5");
+                        });
                 });
 
             modelBuilder.Entity("MapAI.Domain.Entities.UserEntity", b =>
@@ -183,6 +251,42 @@ namespace MapAI.Domain.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MapAI.Domain.Entities.LocationEntity", b =>
+                {
+                    b.HasOne("MapAI.Domain.Entities.UserEntity", "ModeratedBy")
+                        .WithMany()
+                        .HasForeignKey("ModeratedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MapAI.Domain.Entities.UserEntity", "SubmittedBy")
+                        .WithMany()
+                        .HasForeignKey("SubmittedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ModeratedBy");
+
+                    b.Navigation("SubmittedBy");
+                });
+
+            modelBuilder.Entity("MapAI.Domain.Entities.LocationReviewEntity", b =>
+                {
+                    b.HasOne("MapAI.Domain.Entities.LocationEntity", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MapAI.Domain.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
 
                     b.Navigation("User");
                 });

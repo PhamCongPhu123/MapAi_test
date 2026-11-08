@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion'
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
 import { 
   MessageSquare, 
@@ -90,7 +90,6 @@ const FAQItem = ({ question, answer }) => {
 function Home() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const scrollRef = useRef(null)
   const { scrollYProgress } = useScroll()
   
   const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0])

@@ -6,5 +6,7 @@ namespace MapAI.Application.Interfaces
     {
         Task<List<NominatimResult>?> SearchLocationsAsync(string query);
         Task<object?> GetDirectionAsync(OsmRouteRequest request);
+        Task<MapPlaceSearchResult> FindPlacesAsync(MapPlaceQuery request, CancellationToken cancellationToken = default);
+        Task<NearestDirectionResult> GetNearestDirectionAsync(NearestDirectionRequest request, CancellationToken cancellationToken = default);
     }
 }

@@ -7,9 +7,23 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:mobile": "node --test tests/mobile.test.mjs",
+    "mobile:sync": "node scripts/mobile.mjs production",
+    "mobile:sync:dev": "node scripts/mobile.mjs development",
+    "android:open": "cap open android",
+    "ios:open": "cap open ios",
+    "test:mobile:e2e": "playwright test",
+    "test:map-actions": "node --test tests/map-actions.test.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/geolocation": "^8.2.4",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/keyboard": "^8.0.6",
+    "@capacitor/status-bar": "^8.0.4",
     "@react-oauth/google": "^0.13.4",
     "@tailwindcss/vite": "^4.2.2",
     "framer-motion": "^12.38.0",
@@ -21,7 +35,10 @@
     "recharts": "^3.8.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
@@ -32,6 +49,10 @@
     "globals": "^17.4.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
+    "typescript": "~5.9.3",
     "vite": "^8.0.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

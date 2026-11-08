@@ -1,5 +1,11 @@
 # MapAI - Trải Nghiệm Bản Đồ Thông Minh Thế Hệ Mới
 
+📱 **Ứng dụng Android/iOS:** Frontend đã tích hợp Capacitor. Xem [hướng dẫn chạy trên điện thoại](MOBILE.md), gồm cấu hình backend trên máy tính, Android Emulator, tạo APK và các giới hạn hiện tại.
+
+📍 **Địa điểm và đánh giá cộng đồng:** Xem [cách gửi địa điểm, admin duyệt và cập nhật database](../COMMUNITY.md).
+
+🤖 **AI điều khiển bản đồ:** Xem [API tìm gần nhất, chỉ đường và các lệnh bản đồ](../MAP_AI_TOOLS.md).
+
 Chào mừng bạn đến với **MapAI** — trải nghiệm bản đồ thông minh kết hợp giữa thế giới 3D sống động và khả năng hỗ trợ bằng AI. Với MapAI, việc khám phá thành phố, đặc biệt là Đà Nẵng, trở nên dễ dàng, chính xác và đầy cảm hứng hơn.
 aaaa
 ---

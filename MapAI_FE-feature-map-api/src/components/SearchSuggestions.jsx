@@ -5,7 +5,7 @@ import {
   Ticket, ShoppingBag, X, CreditCard 
 } from 'lucide-react';
 
-export const SUGGESTIONS = [
+const SUGGESTIONS = [
   { id: 'coffee', label: 'Cà phê', icon: Coffee, query: 'coffee' },
   { id: 'restaurant', label: 'Ăn uống', icon: Utensils, query: 'restaurant' },
   { id: 'bus', label: 'Trạm xe bus', icon: Bus, query: 'bus station' },

@@ -18,8 +18,19 @@ Nhiệm vụ của bạn là phân tích câu hỏi của người dùng và ph�
 - '3D': Xem bản đồ 3D nghiêng.
 - 'Location': Tìm MỘT vị trí cụ thể theo tên riêng (ví dụ: ""tìm Cầu Rồng"", ""đưa tôi tới Chợ Cồn""). Trích xuất tên riêng vào 'target_location'.
 - 'Direction': Chỉ đường tới một địa điểm (ví dụ: ""chỉ đường tới sân bay"", ""đường đi đến Hội An""). Trích xuất đích đến vào 'target_location'.
-- 'Nearby': Tìm CÁC địa điểm theo loại ở GẦN VỊ TRÍ HIỆN TẠI (ví dụ: ""quán cafe gần đây"", ""ATM quanh tôi"", ""cây xăng gần nhất""). Trích xuất loại địa điểm (cafe, atm, xăng...) vào 'search_query'.
+- 'Nearby': Tìm NHIỀU địa điểm quanh vị trí hiện tại, ví dụ ""ATM quanh tôi"".
+- 'Nearest': Tìm MỘT địa điểm gần nhất, ví dụ ""tôi muốn tìm cây xăng gần nhất"", ""nhà thuốc gần nhất"". Không dùng Nearby cho yêu cầu gần nhất.
+- 'NearestDirection': Chỉ đường tới địa điểm gần nhất, ví dụ ""chỉ đường tới cây xăng gần nhất"".
+- 'Around': Tìm theo loại quanh một địa điểm có tên, ví dụ ""quán cafe trong bán kính 2 km quanh Cầu Rồng"". Ghi tên trung tâm vào reference_location, không tự bịa tọa độ.
+- 'ZoomIn', 'ZoomOut': Phóng to hoặc thu nhỏ bản đồ.
+- 'Locate': Về vị trí hiện tại của người dùng. Không được đoán vị trí.
+- 'ResetNorth': Quay bản đồ về hướng Bắc.
+- 'ClearResults': Xóa ghim/kết quả tìm kiếm; 'ClearRoute': Xóa tuyến đường.
+- 'DirectionSelected': ""chỉ đường đến đó"" hoặc đến kết quả vừa chọn. Chỉ dùng SelectedLocation do ứng dụng cung cấp; không đoán đích.
 - 'CityWide': Tìm CÁC địa điểm theo loại trên TOÀN THÀNH PHỐ ĐÀ NẴNG (ví dụ: ""tìm các quán cafe ở Đà Nẵng"", ""danh sách bệnh viện tại Đà Nẵng"", ""địa điểm du lịch đẹp""). Trích xuất loại địa điểm vào 'search_query'.
+
+search_query cho Nearest, NearestDirection, Around, Nearby dùng ID: fuel (cây xăng), atm, pharmacy (nhà thuốc), hospital, cafe, restaurant, parking, charging_station (trạm sạc). Cây xăng không phải trạm sạc.
+radius_meters là bán kính người dùng yêu cầu, đổi km sang m; mặc định 5000. travel_mode: driving, bicycle hoặc foot. Không khẳng định có kết quả, đang mở cửa hoặc tuyến đã được tính trước khi API thực sự trả về.
 
 TRẢ VỀ JSON CHÍNH XÁC THEO SCHEMA.
 ";
@@ -38,7 +49,7 @@ TRẢ VỀ JSON CHÍNH XÁC THEO SCHEMA.
                 action_type = new
                 {
                     type = "string",
-                    @enum = new[] { "2D", "3D", "Location", "Direction", "Nearby", "CityWide" },
+                    @enum = new[] { "2D", "3D", "Location", "Direction", "Nearby", "CityWide", "Nearest", "NearestDirection", "Around", "ZoomIn", "ZoomOut", "Locate", "ResetNorth", "ClearResults", "ClearRoute", "DirectionSelected" },
                     description = "Chỉ cung cấp nếu category là 'action_map'."
                 },
                 target_location = new
@@ -50,7 +61,10 @@ TRẢ VỀ JSON CHÍNH XÁC THEO SCHEMA.
                 {
                     type = "string",
                     description = "Từ khóa loại địa điểm (dành cho Nearby và CityWide chỉ dùng tiếng anh , ví dụ: 'cafe', 'hospital')."
-                }
+                },
+                radius_meters = new { type = "integer", description = "Bán kính tìm kiếm tính bằng mét, mặc định 5000." },
+                travel_mode = new { type = "string", @enum = new[] { "driving", "bicycle", "foot" } },
+                reference_location = new { type = "string", description = "Tên địa điểm trung tâm chỉ khi người dùng yêu cầu tìm quanh một địa điểm khác, không phải quanh họ." }
             },
             required = new[] { "category" }
         };

@@ -18,7 +18,7 @@ namespace MapAI.Infrastructure.Repositories
         {
             _httpClient = httpClient;
             _httpClient.Timeout = TimeSpan.FromSeconds(120);
-            _apiKey = config["GeminiConfig:ApiKey"]?.Trim() ?? throw new ArgumentNullException("GeminiConfig:ApiKey missing");
+            _apiKey = config["GeminiConfig:ApiKey"]?.Trim() ?? string.Empty;
             _modelId = config["GeminiConfig:Model"]?.Trim() ?? "gemini-2.5-flash"; 
             _logger = logger;
         }
@@ -30,6 +30,7 @@ namespace MapAI.Infrastructure.Repositories
             List<ChatMessage>? chatHistory = null, 
             double temperature = 0.3)
         {
+            if (string.IsNullOrWhiteSpace(_apiKey)) throw new InvalidOperationException("Chưa cấu hình GeminiConfig:ApiKey cho các yêu cầu AI nâng cao.");
             var contents = new List<object>();
 
             // Thêm lịch sử nếu có
@@ -39,7 +40,7 @@ namespace MapAI.Infrastructure.Repositories
                 {
                     contents.Add(new
                     {
-                        role = msg.Role == "ai" ? "model" : "user",
+                        role = msg.Role is "ai" or "assistant" or "model" ? "model" : "user",
                         parts = new[] { new { text = msg.Text } }
                     });
                 }

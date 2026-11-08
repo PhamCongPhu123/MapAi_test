@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import MainLayout from './components/MainLayout'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -17,16 +17,19 @@ import AdminLayout from './pages/Admin/AdminLayout'
 import Dashboard from './pages/Admin/Dashboard'
 import UserManagement from './pages/Admin/UserManagement'
 import LocationManagement from './pages/Admin/LocationManagement'
+import ContributionModeration from './pages/Admin/ContributionModeration'
 
 import './App.css'
 
 function App() {
   const { user } = useAuth();
+  const location = useLocation();
 
   // Helper to get redirect path based on role
   const getHomeRedirect = () => {
     if (user?.role === 'Admin' || user?.role == 0) return "/admin/dashboard";
-    return "/";
+    const from = location.state?.from;
+    return from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/';
   };
 
   return (
@@ -60,6 +63,7 @@ function App() {
           <Route path="/admin/dashboard" element={<Dashboard />} />
           <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/admin/locations" element={<LocationManagement />} />
+          <Route path="/admin/contributions" element={<ContributionModeration />} />
         </Route>
       </Route>
 

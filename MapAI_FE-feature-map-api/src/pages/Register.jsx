@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { validateEmail, validateName, validatePassword } from "../utils/validators";
+import { canUseGoogleWebLogin } from '../config/platform';
 import { 
   Mail, 
   Lock, 
@@ -100,8 +101,9 @@ export default function Register() {
             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/40 to-transparent"></div>
             
             <form onSubmit={handleSubmit} className="space-y-5">
-              <motion.button
+              {canUseGoogleWebLogin && <motion.button
                 type="button"
+                onClick={() => navigate('/login')}
                 whileHover={{ scale: 1.01, backgroundColor: "#f8fafc" }}
                 whileTap={{ scale: 0.99 }}
                 className="w-full py-3 bg-white text-slate-950 font-black rounded-xl flex items-center justify-center gap-2.5 transition-all text-[12px] shadow-lg shadow-white/5"
@@ -113,7 +115,7 @@ export default function Register() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
                 <span>Đăng ký nhanh với Google</span>
-              </motion.button>
+              </motion.button>}
 
               <div className="relative flex items-center">
                 <div className="flex-grow border-t border-white/5"></div>

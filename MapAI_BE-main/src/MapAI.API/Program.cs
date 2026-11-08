@@ -59,6 +59,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<ITokenStoreService, TokenStoreService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddScoped<ICommunityLocationService, CommunityLocationService>();
 builder.Services.AddScoped<IMapService, MapService>();
 builder.Services.AddScoped<IFoursquareService, FoursquareService>();
 builder.Services.AddScoped<IAiService, AiService>();

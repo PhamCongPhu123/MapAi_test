@@ -4,7 +4,6 @@ import { useAuth } from '../hooks/useAuth';
 
 import { 
   Map, 
-  Menu, 
   LogIn, 
   Search, 
   Bell, 
@@ -40,7 +39,7 @@ const Header = () => {
     <motion.header 
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-2xl border-b border-white/5 px-4 md:px-10 h-16 flex justify-between items-center transition-all duration-300"
+      className="app-header fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-2xl border-b border-white/5 px-4 md:px-10 flex justify-between items-center transition-all duration-300"
     >
       {/* Left: Logo & Brand */}
       <div className="flex items-center gap-8">
@@ -190,9 +189,6 @@ const Header = () => {
             </div>
           )}
           
-          <button className="lg:hidden text-white p-1.5 bg-white/5 rounded-lg border border-white/10">
-            <Menu size={18} />
-          </button>
         </div>
       </div>
     </motion.header>
