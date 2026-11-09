@@ -1,3 +1,4 @@
+import { mockStreetTiles } from './helpers/basemap.js';
 import { test, expect } from '@playwright/test';
 
 const user = { id: 'student', fullName: 'Sinh viên MapAI', email: 'student@example.com', role: 'User' };
@@ -5,10 +6,7 @@ const token = `header.${Buffer.from(JSON.stringify({ sub: user.id, exp: 41024448
 
 test.beforeEach(async ({ page }) => {
   // Isolate layout and navigation from external map credentials and database state.
-  await page.route('https://demotiles.maplibre.org/**', route => route.fulfill({
-    json: { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#0f172a' } }] },
-    headers: { 'access-control-allow-origin': '*' },
-  }));
+  await mockStreetTiles(page);
   await page.route('**/api/v1/**', route => {
     const path = new URL(route.request().url()).pathname;
     let json = [];
@@ -107,6 +105,7 @@ test('place details fit viewport and phone layout survives landscape rotation', 
   await page.waitForFunction(() => Boolean(window.showPlaceDetails));
   await page.evaluate(() => window.showPlaceDetails('Cầu Rồng', 108.2275, 16.0612));
   await expect(page.locator('.place-detail-card')).toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
   if (testInfo.project.name === 'phone') {
     for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
       await page.setViewportSize(viewport);

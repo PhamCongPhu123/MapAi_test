@@ -1,7 +1,7 @@
 import React from 'react';
-import { ChevronUp, RotateCcw, LocateFixed, Compass, RotateCw, ChevronDown } from 'lucide-react';
+import { ChevronUp, RotateCcw, LocateFixed, Compass, RotateCw, ChevronDown, Loader2 } from 'lucide-react';
 
-const NavigationControls = ({ map, onLocate, bearing, isUserLocating }) => {
+const NavigationControls = ({ map, onLocate, bearing, isUserLocating, isLocating }) => {
   if (!map) return null;
 
   return (
@@ -22,10 +22,13 @@ const NavigationControls = ({ map, onLocate, bearing, isUserLocating }) => {
       
       <button 
         onClick={onLocate} 
+        disabled={isLocating}
+        aria-label="Vị trí của tôi"
+        aria-busy={isLocating}
         className={`p-3 rounded-full transition-all ${isUserLocating ? 'text-blue-500 bg-blue-500/10' : 'text-emerald-400 hover:bg-white/5'}`}
-        title={isUserLocating ? "Xóa vị trí" : "Vị trí của tôi"}
+        title={isUserLocating ? "Cập nhật vị trí hiện tại" : "Vị trí của tôi"}
       >
-        <LocateFixed size={20} />
+        {isLocating ? <Loader2 size={20} className="animate-spin" /> : <LocateFixed size={20} />}
       </button>
 
       <button 

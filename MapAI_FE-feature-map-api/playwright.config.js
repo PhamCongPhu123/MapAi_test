@@ -17,7 +17,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1 --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174',
-    env: { VITE_API_BASE_URL: 'http://127.0.0.1:5028/api/v1' },
+    env: { VITE_API_BASE_URL: 'http://127.0.0.1:5028/api/v1', VITE_MAPTILER_KEY: process.env.MAPAI_TEST_MAPTILER_KEY || '' },
     reuseExistingServer: false,
   },
 });

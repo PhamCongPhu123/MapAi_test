@@ -26,7 +26,7 @@ const MapPage = () => {
   const [hasNearbyResults, setHasNearbyResults] = useState(false);
   const [pendingNearbySearch, setPendingNearbySearch] = useState(null);
   const [showContributions, setShowContributions] = useState(false);
-  const chatEndRef = useRef(null);
+  const chatScrollRef = useRef(null);
   const mapRef = useRef(null);
   const lastAiPlace = useRef(null);
 
@@ -130,13 +130,12 @@ const MapPage = () => {
     }
   ]);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isAiLoading]);
+    const scroller = chatScrollRef.current;
+    scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
+  }, [messages, isAiLoading, isChatCollapsed]);
+
+  useEffect(() => { window.scrollTo(0, 0); }, []);
 
   const handleFlyTo = (loc) => {
     if (mapRef.current && loc) {
@@ -369,8 +368,9 @@ const MapPage = () => {
       
       {/* --- PHẦN BẢN ĐỒ --- */}
       <motion.div 
+        initial={false}
         animate={{ width: isMobile ? '100%' : (isNavigating ? 'calc(100% - 80px)' : (isChatCollapsed ? '100%' : '70%')) }}
-        className="relative h-full bg-[#121212] overflow-hidden"
+        className="relative shrink-0 h-full bg-[#121212] overflow-hidden"
       >
         {!isNavigating && (
           <div className="map-search absolute top-6 left-6 z-[60] flex flex-col gap-4">
@@ -429,6 +429,7 @@ const MapPage = () => {
 
       {/* --- PHẦN CHAT UI --- */}
       <motion.div 
+        initial={false}
         id="map-chat"
         role={isMobile ? 'dialog' : undefined}
         aria-label="Trợ lý MapAI"
@@ -439,7 +440,7 @@ const MapPage = () => {
           x: isMobile ? 0 : ((isChatCollapsed && !isNavigating) ? 100 : 0),
           y: isMobile && (isChatCollapsed || isNavigating) ? '110%' : '0%'
         }}
-        className="map-chat h-full flex flex-col bg-[#0f0f12] relative border-l border-white/5 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]"
+        className="map-chat shrink-0 h-full flex flex-col bg-[#0f0f12] relative border-l border-white/5 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]"
       >
         {isNavigating ? (
           <div className="flex flex-col items-center py-8 gap-8 h-full bg-gradient-to-b from-blue-600/10 to-transparent">
@@ -477,7 +478,7 @@ const MapPage = () => {
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
                   <motion.div key={msg.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className={`flex w-full ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -541,7 +542,6 @@ const MapPage = () => {
                   </div>
                 )}
               </AnimatePresence>
-              <div ref={chatEndRef} />
             </div>
 
             <div className="p-6 shrink-0 bg-gradient-to-t from-[#0f0f12] to-transparent">

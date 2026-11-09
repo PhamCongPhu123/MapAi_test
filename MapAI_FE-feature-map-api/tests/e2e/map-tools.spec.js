@@ -1,3 +1,4 @@
+import { mockStreetTiles } from './helpers/basemap.js';
 import { test, expect } from '@playwright/test';
 
 const routeData = {
@@ -16,10 +17,7 @@ async function setup(page, context) {
     localStorage.setItem('accessToken', `header.${btoa(JSON.stringify({ sub: 'student' }))}.signature`);
     sessionStorage.setItem('user_location', JSON.stringify({ lat: 10, lng: 105, timestamp: 1 }));
   });
-  await page.route('https://demotiles.maplibre.org/**', route => route.fulfill({
-    json: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0f172a' } }] },
-    headers: { 'access-control-allow-origin': '*' },
-  }));
+  await mockStreetTiles(page);
   await page.route('**/api/v1/**', route => {
     const url = new URL(route.request().url());
     const path = url.pathname;

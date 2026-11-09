@@ -54,6 +54,14 @@ button, a, input, textarea {
   right: max(2.5rem, var(--safe-right));
 }
 
+.map-notices {
+  left: max(.75rem, var(--safe-left));
+  bottom: calc(6rem + var(--safe-bottom));
+  max-width: min(24rem, calc(100% - 5.5rem));
+  max-height: 50dvh;
+  overflow-y: auto;
+}
+
 .admin-layout {
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
 }
