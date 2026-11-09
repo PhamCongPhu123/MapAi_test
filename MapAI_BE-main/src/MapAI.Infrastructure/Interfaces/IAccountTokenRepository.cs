@@ -10,6 +10,7 @@ namespace MapAI.Infrastructure.Interfaces
         Task<AccountTokenEntity?> GetByUserAndType(string userId, ETokenType type);
         Task AddAsync(AccountTokenEntity token);
         Task UpdateAsync(AccountTokenEntity token);
+        Task<bool> CompleteEmailVerificationAsync(AccountTokenEntity token);
         Task DeleteByUserIdAsync(string userId);
         Task DeleteByUserAndType(string userId, ETokenType type);
         Task DeleteAsync(string id);

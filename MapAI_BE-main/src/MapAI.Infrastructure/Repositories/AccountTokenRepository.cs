@@ -45,6 +45,32 @@ namespace MapAI.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
+        public async Task<bool> CompleteEmailVerificationAsync(AccountTokenEntity token)
+        {
+            // Soft-delete a used verification token instead of losing its proof.
+            // Replaying the same valid link then succeeds without activating the
+            // account again. Both first activation and consumption are atomic.
+            var now = DateTimeOffset.UtcNow;
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var matching = _context.AccountTokens.Where(t => t.Id == token.Id
+                && t.UserId == token.UserId && t.TokenHash == token.TokenHash
+                && t.Type == ETokenType.EmailVerification);
+            var consumed = await matching.Where(t => !t.IsDeleted && t.ExpiresAt >= now)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.IsDeleted, true)
+                    .SetProperty(t => t.UpdatedAt, now));
+            if (consumed == 1)
+            {
+                await _context.Users.Where(u => u.Id == token.UserId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, true)
+                        .SetProperty(u => u.UpdatedAt, now));
+            }
+            // A consumed link is only a confirmation, never permission to
+            // reactivate a disabled account or accept an arbitrary token.
+            var verified = await matching.AnyAsync(t => t.IsDeleted && t.User.IsActive);
+            await transaction.CommitAsync();
+            return verified;
+        }
+
         public async Task DeleteByUserIdAsync(string userId)
         {
             await _context.AccountTokens

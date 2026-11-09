@@ -65,11 +65,12 @@ try
         if (code != null) Check(json["code"]?.GetValue<string>() == code, $"POST {path}: error code {code}");
         return json;
     }
-    async Task Verify(string link, int expected)
+    async Task<JsonObject> Verify(string link, int expected)
     {
         var uri = new Uri(link);
         using var response = await client.GetAsync("/api/v1/auth/verify-email" + uri.Query);
         Check((int)response.StatusCode == expected, $"Email link verification: expected {expected}, got {(int)response.StatusCode}");
+        return (await response.Content.ReadFromJsonAsync<JsonObject>())!;
     }
     async Task AgeVerification(string userId)
     {
@@ -90,8 +91,10 @@ try
     Check(rawToken.EndsWith("==") && new Uri(originalLink).Query.Contains("%3D"), "Base64 token is URL-encoded and round-trips");
 
     await Post("login", new { email, password }, 403, "EMAIL_NOT_VERIFIED");
-    await Post("login", new { email, password = "wrong" }, 401, "INVALID_CREDENTIALS");
-    await Post("login", new { email = "missing@example.invalid", password }, 401, "INVALID_CREDENTIALS");
+    var wrongPassword = await Post("login", new { email, password = "wrong" }, 401, "INVALID_CREDENTIALS");
+    var wrongEmail = await Post("login", new { email = "missing@example.invalid", password }, 401, "INVALID_CREDENTIALS");
+    Check(wrongPassword["message"]?.GetValue<string>() == "Email hoặc mật khẩu không chính xác."
+        && wrongEmail["message"]?.GetValue<string>() == "Email hoặc mật khẩu không chính xác.", "Wrong password and unknown email return the same clear warning");
     await Post("login", new { email }, 400);
     await Post("register", Registration("STUDENT@example.invalid"), 409, "EMAIL_EXISTS");
     await Post("resend-verification", new { email }, 429, "VERIFICATION_COOLDOWN");
@@ -99,12 +102,17 @@ try
     await Post("resend-verification", new { email = "not-an-email" }, 400);
     await AgeVerification(user.Id);
     await Verify(originalLink, 400);
+    Check(!await db.Users.AsNoTracking().Where(u => u.Id == user.Id).Select(u => u.IsActive).SingleAsync(), "An unused expired link cannot activate an account");
     await Post("resend-verification", new { email = "STUDENT@example.invalid" }, 200);
     Check(mail.Messages.Count == 2, "Expired verification can be resent without admin assistance");
     var currentLink = mail.LastLink;
     await Verify(originalLink, 400);
+    await Task.WhenAll(Verify(currentLink, 200), Verify(currentLink, 200));
     await Verify(currentLink, 200);
-    Check(!await db.AccountTokens.AnyAsync(t => t.UserId == user.Id && t.Type == ETokenType.EmailVerification), "Successful verification consumes token");
+    Check(await db.AccountTokens.AnyAsync(t => t.UserId == user.Id && t.Type == ETokenType.EmailVerification && t.IsDeleted), "Successful verification retains a consumed proof for repeated links");
+    await AgeVerification(user.Id);
+    await Verify(currentLink, 200);
+    await Verify($"http://localhost:5173/verify-email?userId={user.Id}&token=incorrect", 400);
 
     var login = await Post("login", new { email = "  STUDENT@example.invalid  ", password }, 200);
     var access = login["accessToken"]!.GetValue<string>();
@@ -143,6 +151,10 @@ try
     await db.SaveChangesAsync();
     await Verify($"http://localhost:5173/verify-email?userId={legacy.Id}&token=legacy+token/==", 200);
     await Post("login", new { email = "legacy@example.invalid", password }, 200);
+    await db.Users.Where(u => u.Id == legacy.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+    await Verify($"http://localhost:5173/verify-email?userId={legacy.Id}&token=legacy+token/==", 400);
+    Check(!await db.Users.AsNoTracking().Where(u => u.Id == legacy.Id).Select(u => u.IsActive).SingleAsync(), "A consumed proof never reactivates a disabled account, even if its token was retained");
+    await Post("login", new { email = "legacy@example.invalid", password }, 403, "ACCOUNT_DISABLED");
 
     mail.FailNext = true;
     await Post("register", Registration("retry@example.invalid"), 503, "VERIFICATION_EMAIL_UNAVAILABLE");
@@ -170,7 +182,7 @@ finally
 void Check(bool condition, string message)
 {
     if (!condition) throw new Exception("FAIL: " + message);
-    passed++;
+    Interlocked.Increment(ref passed);
 }
 
 sealed class AuthFactory(CapturingEmail email) : WebApplicationFactory<AuthController>

@@ -7,9 +7,12 @@ This document describes the authentication flow and API specifications for the M
 Người dùng **không cần quản trị viên duyệt tài khoản**. Luồng email/mật khẩu là: đăng ký → mở liên kết xác thực trong email → đăng nhập. Việc admin duyệt chỉ áp dụng cho địa điểm cộng đồng.
 
 - Tài khoản đăng ký công khai luôn có vai trò `User`; API bỏ qua mọi trường `role` do client gửi. Enum trong database là `Admin = 0`, `User = 1`.
+- Nhập email không tồn tại hoặc mật khẩu sai đều hiển thị **Email hoặc mật khẩu không chính xác.** (`401`, `INVALID_CREDENTIALS`). Chưa xác thực email vẫn có thông báo riêng và nút gửi lại.
 - Nếu chưa xác thực, trang đăng nhập hiển thị lý do và nút **Gửi lại email xác thực**. Chờ ít nhất 60 giây giữa hai lần gửi. Liên kết mới có hiệu lực 5 phút và thay thế liên kết trước đó; kiểm tra cả Spam.
 - Tài khoản cũ đang chờ xác thực vẫn dùng được nút gửi lại, không cần đăng ký lại hoặc sửa `IsActive` bằng SQL. Tài khoản bị vô hiệu hóa không thể mở khóa qua gửi lại email.
 - Với liên kết đã hết hạn, quay về đăng nhập, nhập email/mật khẩu rồi bấm đăng nhập để hiện hướng dẫn gửi lại.
+- Khi một liên kết hợp lệ đã xác thực thành công, mở lại hoặc tải lại liên kết đó vẫn hiển thị thành công. Backend đánh dấu token email đã dùng bằng `IsDeleted = true` và lưu hash làm bằng chứng; không lưu token thô. Việc đánh dấu và kích hoạt tài khoản nằm trong cùng transaction, hỗ trợ cả hai yêu cầu gửi đồng thời. Token đã dùng không thể kích hoạt lại tài khoản bị vô hiệu hóa; token sai hoặc hết hạn trước khi được dùng vẫn bị từ chối.
+- Trang xác thực chỉ hiển thị một kết quả trên trang, không phát thêm toast thành công/thất bại riêng. Khi chuyển sang liên kết khác, kết quả của liên kết trước không được dùng cho liên kết mới. Những liên kết đã được backend cũ xóa sau khi xác thực không có bằng chứng để kiểm tra lại; người dùng đã xác thực có thể đăng nhập trực tiếp.
 - Khi gửi email thất bại, tài khoản có thể đã được tạo. API trả `VERIFICATION_EMAIL_UNAVAILABLE`; frontend chuyển sang hướng dẫn gửi lại thay vì yêu cầu đăng ký một tài khoản trùng email.
 - Backend dùng bảng `Users` và `AccountTokens` của ứng dụng, không dùng Supabase Auth để đăng nhập.
 
@@ -147,4 +150,4 @@ Frontend checks (from the frontend folder, with Playwright Chromium installed):
 npx playwright test tests/e2e/auth.spec.js
 ```
 
-These UI checks simulate API replies to verify error messages, registration, resend and a single-use verification link under React StrictMode on phone and desktop layouts.
+These UI checks simulate API replies to verify credential warnings, registration, resend and verification under React StrictMode on phone and desktop layouts. They cover reload/back navigation, changing links while awaiting a response and avoiding contradictory success/error notifications. The PostgreSQL checks cover simultaneous verification, repeated/expired completed links, unused expired tokens and disabled accounts.

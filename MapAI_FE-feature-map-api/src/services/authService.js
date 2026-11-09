@@ -12,15 +12,17 @@ async function authRequest(path, options, fallback) {
     const payload = await response.json().catch(() => null);
     const body = payload && typeof payload === 'object' ? payload : {};
     const legacyMessages = {
-      'Invalid credentials': 'Email hoặc mật khẩu không đúng.',
+      'Invalid credentials': 'Email hoặc mật khẩu không chính xác.',
       'Account not active': 'Tài khoản chưa được kích hoạt. Vui lòng xác thực email trước khi đăng nhập.',
       'Email already exists': 'Email đã được đăng ký. Vui lòng đăng nhập hoặc gửi lại email xác thực.',
       'Verification token expired': 'Liên kết xác thực đã hết hạn. Vui lòng gửi lại email xác thực.',
       'Invalid verification token': 'Liên kết xác thực không hợp lệ. Vui lòng gửi lại email xác thực.',
     };
     const message = body.message || body.detail || Object.values(body.errors || {}).flat().join(' ') || fallback;
-    const error = new Error(legacyMessages[message] || message);
-    error.code = body.code || (message === 'Account not active' ? 'EMAIL_NOT_VERIFIED' : undefined);
+    const code = body.code || (path === '/auth/login' && response.status === 401 ? 'INVALID_CREDENTIALS'
+      : message === 'Account not active' ? 'EMAIL_NOT_VERIFIED' : undefined);
+    const error = new Error(code === 'INVALID_CREDENTIALS' ? 'Email hoặc mật khẩu không chính xác.' : legacyMessages[message] || message);
+    error.code = code;
     error.status = response.status;
     throw error;
   }

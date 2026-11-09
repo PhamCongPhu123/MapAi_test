@@ -24,17 +24,34 @@ async function fillRegistration(page) {
   await page.getByRole('button', { name: 'Tạo tài khoản MapAI' }).click();
 }
 
-test('incorrect password shows the API message and saves no session', async ({ page }) => {
+test('incorrect password shows a clear warning and saves no session', async ({ page }) => {
   await page.route('**/auth/login', route => route.fulfill({
-    status: 401, json: { code: 'INVALID_CREDENTIALS', message: 'Email hoặc mật khẩu không đúng.' }, headers,
+    status: 401, json: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials' }, headers,
   }));
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Đăng nhập MapAI' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Đăng ký', exact: true })).toBeVisible();
   await fillLogin(page);
-  await expect(page.getByRole('alert')).toHaveText('Email hoặc mật khẩu không đúng.');
+  await expect(page.getByRole('alert')).toHaveText('Email hoặc mật khẩu không chính xác.');
   await expect(page.getByRole('button', { name: 'Gửi lại email xác thực' })).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('accessToken'))).toBeNull();
+});
+
+test('unknown email and an empty 401 response still show the credential warning', async ({ page }) => {
+  await page.route('**/auth/login', route => route.fulfill({ status: 401, body: '', headers }));
+  await page.goto('/login');
+  await fillLogin(page);
+  await expect(page.getByRole('alert')).toHaveText('Email hoặc mật khẩu không chính xác.');
+  await expect(page.getByRole('button', { name: 'Gửi lại email xác thực' })).toHaveCount(0);
+});
+
+test('legacy invalid-credentials response is translated instead of a generic login failure', async ({ page }) => {
+  await page.route('**/auth/login', route => route.fulfill({ status: 400, headers,
+    json: { message: 'Invalid credentials' },
+  }));
+  await page.goto('/login');
+  await fillLogin(page);
+  await expect(page.getByRole('alert')).toHaveText('Email hoặc mật khẩu không chính xác.');
 });
 
 test('unverified user can resend email and sees cooldown errors', async ({ page }) => {
@@ -86,7 +103,7 @@ test('SMTP failure explains that the account exists and offers resend instead of
   await expect(page.getByRole('button', { name: 'Gửi lại email xác thực' })).toBeVisible();
 });
 
-test('one-use email link is verified once under React StrictMode and preserves Base64 characters', async ({ page }) => {
+test('email link is verified once under React StrictMode and preserves Base64 characters', async ({ page }) => {
   let attempts = 0;
   await page.route('**/auth/verify-email?**', async route => {
     attempts++;
@@ -96,9 +113,56 @@ test('one-use email link is verified once under React StrictMode and preserves B
   });
   await page.goto('/verify-email?userId=test&token=a%2Bb%2Fc%3D%3D');
   await expect(page.getByRole('heading', { name: 'Xác thực thành công' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Xác thực thất bại' })).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
   expect(attempts).toBe(1);
   await page.getByRole('link', { name: 'Đi đến Đăng nhập' }).click();
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('status')).toHaveText('Email đã được xác thực thành công. Bạn có thể đăng nhập.');
+});
+
+test('refreshing or reopening a completed link keeps the success result without contradictory toast', async ({ page }) => {
+  let attempts = 0;
+  await page.route('**/auth/verify-email?**', route => {
+    attempts++;
+    return route.fulfill({ status: 200, json: { message: 'Email verified' }, headers });
+  });
+  const url = '/verify-email?userId=test&token=completed';
+  await page.goto(url);
+  await expect(page.getByRole('heading', { name: 'Xác thực thành công' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Xác thực thành công' })).toBeVisible();
+  await page.getByRole('link', { name: 'Đi đến Đăng nhập' }).click();
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Xác thực thành công' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('Xác thực thất bại', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.app-toasts')).toBeEmpty();
+  expect(attempts).toBe(3);
+});
+
+test('switching email links clears the previous success while the next result is loading', async ({ page }) => {
+  let finishExpired;
+  await page.route('**/auth/verify-email?**', async route => {
+    const isExpired = new URL(route.request().url()).searchParams.get('token') === 'expired';
+    if (isExpired) await new Promise(resolve => { finishExpired = resolve; });
+    await route.fulfill({ status: isExpired ? 400 : 200, headers,
+      json: isExpired ? { code: 'VERIFICATION_EXPIRED', message: 'Liên kết xác thực đã hết hạn.' } : {},
+    });
+  });
+  await page.goto('/verify-email?userId=test&token=completed');
+  await expect(page.getByRole('heading', { name: 'Xác thực thành công' })).toBeVisible();
+  await page.evaluate(() => {
+    history.pushState({}, '', '/verify-email?userId=test&token=expired');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByRole('heading', { name: 'Đang xác thực tài khoản' })).toBeVisible();
+  await expect(page.getByText('Email đã được xác thực thành công!', { exact: false })).toHaveCount(0);
+  await expect.poll(() => Boolean(finishExpired)).toBe(true);
+  finishExpired();
+  await expect(page.getByRole('heading', { name: 'Xác thực thất bại' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveText('Liên kết xác thực đã hết hạn.');
+  await expect(page.locator('.app-toasts')).toBeEmpty();
 });
 
 test('expired email link displays recovery instructions from the API', async ({ page }) => {

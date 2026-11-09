@@ -46,13 +46,13 @@ namespace MapAI.Application.Services
             var user = await _userRepository.GetByEmailAsync(request.Email);
             if (user == null || !HashHelper.Verify(request.Password, user.PasswordHash))
             {
-                throw new AuthException(401, "INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
+                throw new AuthException(401, "INVALID_CREDENTIALS", "Email hoặc mật khẩu không chính xác.");
             }
 
             if (!user.IsActive)
             {
                 var verification = await _tokenRepository.GetByUserAndType(user.Id, ETokenType.EmailVerification);
-                if (verification != null)
+                if (verification is { IsDeleted: false })
                     throw new AuthException(403, "EMAIL_NOT_VERIFIED", "Bạn chưa xác thực email. Hãy mở liên kết trong email hoặc gửi lại email xác thực; không cần quản trị viên duyệt.");
                 throw new AuthException(403, "ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa.");
             }
@@ -133,20 +133,15 @@ namespace MapAI.Application.Services
         public async Task VerifyEmailAsync(string userId, string token)
         {
             var entity = await _tokenRepository.GetByUserAndType(userId, ETokenType.EmailVerification);
-            if (entity == null || entity.ExpiresAt < DateTimeOffset.UtcNow)
-                throw new AuthException(400, "VERIFICATION_EXPIRED", "Liên kết xác thực đã hết hạn hoặc đã được sử dụng. Vui lòng đăng nhập hoặc gửi lại email xác thực.");
+            if (entity == null)
+                throw new AuthException(400, "VERIFICATION_EXPIRED", "Liên kết xác thực đã hết hạn hoặc không còn hợp lệ. Nếu đã xác thực email, bạn có thể đăng nhập; nếu chưa, hãy gửi lại email xác thực.");
 
             // Support links sent by earlier versions, which did not URL-encode '+'.
             if (!HashHelper.Verify(token.Replace(' ', '+'), entity.TokenHash))
                 throw new AuthException(400, "VERIFICATION_INVALID", "Liên kết xác thực không hợp lệ. Vui lòng gửi lại email xác thực.");
 
-            var user = await _userRepository.GetByIdOrEmailAsync(userId);
-            if (user == null) throw new Exception("User not found");
-
-            user.IsActive = true;
-            user.UpdatedAt = DateTimeOffset.UtcNow;
-            await _userRepository.UpdateAsync(user);
-            await _tokenRepository.DeleteAsync(entity.Id);
+            if (!await _tokenRepository.CompleteEmailVerificationAsync(entity))
+                throw new AuthException(400, "VERIFICATION_EXPIRED", "Liên kết xác thực đã hết hạn hoặc không còn hợp lệ. Nếu đã xác thực email, bạn có thể đăng nhập; nếu chưa, hãy gửi lại email xác thực.");
         }
 
         public async Task ResendVerificationEmailAsync(string email)
@@ -157,7 +152,7 @@ namespace MapAI.Application.Services
             // Only accounts awaiting email verification may self-activate.
             // Disabled accounts have no verification token and stay disabled.
             var pending = await _tokenRepository.GetByUserAndType(user.Id, ETokenType.EmailVerification);
-            if (pending == null) return;
+            if (pending == null || pending.IsDeleted) return;
             if (pending.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-1))
                 throw new AuthException(429, "VERIFICATION_COOLDOWN", "Vui lòng chờ 60 giây giữa hai lần gửi email xác thực.");
 
