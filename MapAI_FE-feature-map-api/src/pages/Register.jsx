@@ -34,13 +34,13 @@ export default function Register() {
     setError("");
 
     // Validation
-    if (!validateName(name)) {
+    if (!validateName(name.trim())) {
       setError("Họ tên phải có ít nhất 2 ký tự.");
       addToast("Họ tên không hợp lệ", "error");
       setIsLoading(false);
       return;
     }
-    if (!validateEmail(email)) {
+    if (!validateEmail(email.trim())) {
       setError("Địa chỉ email không hợp lệ.");
       addToast("Email không hợp lệ", "error");
       setIsLoading(false);
@@ -55,17 +55,26 @@ export default function Register() {
 
     try {
       const userData = {
-        fullName: name,
-        email,
+        fullName: name.trim(),
+        email: email.trim(),
         password,
         phoneNumber,
         dateOfBirth: new Date().toISOString(), // Mock, trong thực tế nên có input date
-        role: 0 // 0: User
       };
       await register(userData);
-      addToast("Khởi tạo tài khoản thành công! Vui lòng kiểm tra email để kích hoạt.", "success");
-      navigate("/login");
+      addToast("Đăng ký thành công! Vui lòng xác thực email.", "success");
+      navigate("/login", { state: {
+        registeredEmail: email.trim(), verificationRequired: true,
+        verificationMessage: 'Đăng ký thành công. Hãy mở email xác thực (kiểm tra cả Spam), sau đó đăng nhập. Bạn không cần chờ quản trị viên duyệt.'
+      } });
     } catch (err) {
+      if (err.code === 'VERIFICATION_EMAIL_UNAVAILABLE') {
+        navigate('/login', { state: {
+          registeredEmail: email.trim(), verificationRequired: true,
+          verificationMessage: err.message
+        } });
+        return;
+      }
       const msg = err.message || "Đã có lỗi xảy ra khi đăng ký.";
       setError(msg);
       addToast(msg, "error");
@@ -90,8 +99,8 @@ export default function Register() {
           className="w-full max-w-[430px]"
         >
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">Yêu cầu cấp quyền</h1>
-            <p className="text-slate-500 font-bold text-[11px] uppercase tracking-[0.1em]">Khởi tạo tài khoản hệ thống MapAI</p>
+            <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">Đăng ký MapAI</h1>
+            <p className="text-slate-400 text-sm">Tạo tài khoản và xác thực email để bắt đầu</p>
           </div>
 
           <motion.div 
@@ -126,6 +135,7 @@ export default function Register() {
               <AnimatePresence>
                 {error && (
                   <motion.div 
+                    role="alert"
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
@@ -141,6 +151,8 @@ export default function Register() {
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                   <input
                     type="text"
+                    autoComplete="name"
+                    aria-label="Họ và tên"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -153,6 +165,10 @@ export default function Register() {
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                   <input
                     type="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    inputMode="email"
+                    aria-label="Email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -165,6 +181,8 @@ export default function Register() {
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                   <input
                     type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    aria-label="Mật khẩu"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}

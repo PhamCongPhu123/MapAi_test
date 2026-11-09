@@ -35,11 +35,15 @@ export const AuthProvider = ({ children }) => {
 
   const login = useCallback(async (email, password) => {
     await authApi.login({ email, password });
-    // Dùng /auth/me ngay sau khi login
-    const userData = await authApi.getMe();
-    console.log("BE User Data (login):", userData);
-    setUser(userData);
-    return userData;
+    try {
+      const userData = await authApi.getMe();
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      clearTokens();
+      setUser(null);
+      throw error;
+    }
   }, []);
 
   const register = useCallback(async (userData) => {

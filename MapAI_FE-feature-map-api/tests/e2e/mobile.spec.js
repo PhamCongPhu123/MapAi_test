@@ -45,7 +45,7 @@ test('email login calls existing API and returns to requested map', async ({ pag
   await page.getByPlaceholder('Email', { exact: true }).fill(user.email);
   await page.getByPlaceholder('Mật khẩu', { exact: true }).fill('test-only-password');
   const login = page.waitForRequest(request => request.url().endsWith('/auth/login') && request.method() === 'POST');
-  await page.getByRole('button', { name: 'Truy cập Neural Map' }).click();
+  await page.locator('form').getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   expect((await login).postDataJSON()).toEqual({ email: user.email, password: 'test-only-password' });
   await expect(page).toHaveURL(/\/map\?lat=16\.0544&lng=108\.2022$/);
   await expect(page.getByPlaceholder('Tìm địa điểm, địa chỉ...')).toBeVisible();

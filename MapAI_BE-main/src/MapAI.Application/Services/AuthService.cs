@@ -1,12 +1,14 @@
 using Google.Apis.Auth;
 using MapAI.Infrastructure.Interfaces;
 using MapAI.Application.Interfaces;
+using MapAI.Application.Exceptions;
 using MapAI.Common.Helpers;
 using MapAI.Domain.Entities;
 using MapAI.Domain.Enums;
 using MapAI.Domain.Models.Auth;
 using MapAI.Domain.Models.User;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 
 namespace MapAI.Application.Services
@@ -19,6 +21,7 @@ namespace MapAI.Application.Services
         private readonly IJwtRepository _jwtRepository;
         private readonly IConfiguration _config;
         private readonly IStorageRepository _storageRepository;
+        private readonly ILogger<AuthService> _logger;
 
         public AuthService(
             IUserRepository userRepository,
@@ -26,7 +29,8 @@ namespace MapAI.Application.Services
             IEmailRepository emailRepository,
             IJwtRepository jwtRepository,
             IConfiguration config,
-            IStorageRepository storageRepository)
+            IStorageRepository storageRepository,
+            ILogger<AuthService> logger)
         {
             _userRepository = userRepository;
             _tokenRepository = tokenRepository;
@@ -34,19 +38,23 @@ namespace MapAI.Application.Services
             _jwtRepository = jwtRepository;
             _config = config;
             _storageRepository = storageRepository;
+            _logger = logger;
         }
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
-            var user = await _userRepository.GetByIdOrEmailAsync(request.Email);
+            var user = await _userRepository.GetByEmailAsync(request.Email);
             if (user == null || !HashHelper.Verify(request.Password, user.PasswordHash))
             {
-                throw new Exception("Invalid credentials");
+                throw new AuthException(401, "INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
             }
 
             if (!user.IsActive)
             {
-                throw new Exception("Account not active");
+                var verification = await _tokenRepository.GetByUserAndType(user.Id, ETokenType.EmailVerification);
+                if (verification != null)
+                    throw new AuthException(403, "EMAIL_NOT_VERIFIED", "Bạn chưa xác thực email. Hãy mở liên kết trong email hoặc gửi lại email xác thực; không cần quản trị viên duyệt.");
+                throw new AuthException(403, "ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa.");
             }
 
             var accessToken = _jwtRepository.GenerateAccessToken(user);
@@ -80,7 +88,7 @@ namespace MapAI.Application.Services
                 throw new Exception("Invalid refresh token");
 
             var user = await _userRepository.GetByIdOrEmailAsync(request.UserId);
-            if (user == null) throw new Exception("User not found");
+            if (user == null || !user.IsActive) throw new AuthException(401, "SESSION_EXPIRED", "Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.");
 
             var newAccessToken = _jwtRepository.GenerateAccessToken(user);
             var newRefreshToken = _jwtRepository.GenerateRefreshToken();
@@ -103,17 +111,17 @@ namespace MapAI.Application.Services
 
         public async Task RegisterAsync(RegisterRequest request)
         {
-            var existing = await _userRepository.GetByIdOrEmailAsync(request.Email);
-            if (existing != null) throw new Exception("Email already exists");
+            var existing = await _userRepository.GetByEmailAsync(request.Email);
+            if (existing != null) throw new AuthException(409, "EMAIL_EXISTS", "Email đã được đăng ký. Bạn có thể đăng nhập hoặc gửi lại email xác thực.");
 
             var user = new UserEntity
             {
                 Id = Guid.NewGuid().ToString(),
-                Email = request.Email,
-                FullName = request.FullName,
+                Email = request.Email.Trim().ToLowerInvariant(),
+                FullName = request.FullName.Trim(),
                 PhoneNumber = request.PhoneNumber,
                 PasswordHash = HashHelper.Hash(request.Password),
-                Role = request.Role,
+                Role = EUser.User,
                 IsActive = false,
                 DateOfBirth = DateTime.SpecifyKind(DateTime.Parse(request.DateOfBirth), DateTimeKind.Utc)
             };
@@ -126,10 +134,11 @@ namespace MapAI.Application.Services
         {
             var entity = await _tokenRepository.GetByUserAndType(userId, ETokenType.EmailVerification);
             if (entity == null || entity.ExpiresAt < DateTimeOffset.UtcNow)
-                throw new Exception("Verification token expired");
+                throw new AuthException(400, "VERIFICATION_EXPIRED", "Liên kết xác thực đã hết hạn hoặc đã được sử dụng. Vui lòng đăng nhập hoặc gửi lại email xác thực.");
 
-            if (!HashHelper.Verify(token, entity.TokenHash))
-                throw new Exception("Invalid verification token");
+            // Support links sent by earlier versions, which did not URL-encode '+'.
+            if (!HashHelper.Verify(token.Replace(' ', '+'), entity.TokenHash))
+                throw new AuthException(400, "VERIFICATION_INVALID", "Liên kết xác thực không hợp lệ. Vui lòng gửi lại email xác thực.");
 
             var user = await _userRepository.GetByIdOrEmailAsync(userId);
             if (user == null) throw new Exception("User not found");
@@ -140,9 +149,24 @@ namespace MapAI.Application.Services
             await _tokenRepository.DeleteAsync(entity.Id);
         }
 
+        public async Task ResendVerificationEmailAsync(string email)
+        {
+            var user = await _userRepository.GetByEmailAsync(email);
+            if (user == null || user.IsActive) return;
+
+            // Only accounts awaiting email verification may self-activate.
+            // Disabled accounts have no verification token and stay disabled.
+            var pending = await _tokenRepository.GetByUserAndType(user.Id, ETokenType.EmailVerification);
+            if (pending == null) return;
+            if (pending.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-1))
+                throw new AuthException(429, "VERIFICATION_COOLDOWN", "Vui lòng chờ 60 giây giữa hai lần gửi email xác thực.");
+
+            await GenerateAndSendVerificationEmail(user);
+        }
+
         public async Task<bool> ForgotPasswordAsync(string email)
         {
-            var user = await _userRepository.GetByIdOrEmailAsync(email);
+            var user = await _userRepository.GetByEmailAsync(email);
             if (user == null) throw new Exception("User not found");
 
             var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
@@ -157,7 +181,7 @@ namespace MapAI.Application.Services
             await _tokenRepository.DeleteByUserAndType(user.Id, ETokenType.PasswordReset);
             await _tokenRepository.AddAsync(tokenEntity);
 
-            var resetLink = $"{_config["FrontendUrl"]}/reset-password?userId={user.Id}&token={rawToken}";
+            var resetLink = BuildAccountLink("reset-password", user.Id, rawToken);
             await _emailRepository.SendEmailAsync(user.Email, "Reset Password", $"Click here to reset your password: {resetLink}");
 
             return true;
@@ -188,7 +212,7 @@ namespace MapAI.Application.Services
                 Audience = new[] { _config["Google:ClientId"] }
             });
 
-            var user = await _userRepository.GetByIdOrEmailAsync(payload.Email);
+            var user = await _userRepository.GetByEmailAsync(payload.Email);
             bool isNewUser = false;
 
             if (user == null)
@@ -197,7 +221,7 @@ namespace MapAI.Application.Services
                 user = new UserEntity
                 {
                     Id = Guid.NewGuid().ToString(),
-                    Email = payload.Email,
+                    Email = payload.Email.Trim().ToLowerInvariant(),
                     FullName = payload.Name,
                     IsActive = true,
                     Role = EUser.User,
@@ -207,6 +231,9 @@ namespace MapAI.Application.Services
                 };
                 await _userRepository.AddAsync(user);
             }
+
+            if (!user.IsActive)
+                throw new AuthException(403, "ACCOUNT_INACTIVE", "Tài khoản chưa được kích hoạt hoặc đã bị vô hiệu hóa. Vui lòng đăng nhập bằng email để xem hướng dẫn.");
 
             var accessToken = _jwtRepository.GenerateAccessToken(user);
             var refreshToken = _jwtRepository.GenerateRefreshToken();
@@ -244,8 +271,23 @@ namespace MapAI.Application.Services
             await _tokenRepository.DeleteByUserAndType(user.Id, ETokenType.EmailVerification);
             await _tokenRepository.AddAsync(tokenEntity);
 
-            var verifyLink = $"{_config["FrontendUrl"]}/verify-email?userId={user.Id}&token={rawToken}";
-            await _emailRepository.SendEmailAsync(user.Email, "Verify Email", $"Click here to verify your email: {verifyLink}");
+            var verifyLink = BuildAccountLink("verify-email", user.Id, rawToken);
+            try
+            {
+                await _emailRepository.SendEmailAsync(user.Email, "Xác thực email MapAI", $"<p>Nhấn vào <a href=\"{System.Net.WebUtility.HtmlEncode(verifyLink)}\">Xác thực email</a> để hoàn tất đăng ký MapAI. Liên kết có hiệu lực {(int)EExpiredTime.VerifyEmail} phút.</p><p>Bạn không cần chờ quản trị viên duyệt tài khoản.</p>");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Verification email delivery failed ({FailureType}).", ex.GetType().Name);
+                throw new AuthException(503, "VERIFICATION_EMAIL_UNAVAILABLE", "Tài khoản chưa được xác thực vì không gửi được email. Vui lòng thử Gửi lại email xác thực sau.");
+            }
+        }
+
+        private string BuildAccountLink(string path, string userId, string token)
+        {
+            var frontendUrl = _config["FrontendUrl"]?.TrimEnd('/')
+                ?? throw new InvalidOperationException("FrontendUrl is not configured.");
+            return $"{frontendUrl}/{path}?userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}";
         }
 
         public async Task UpdateUserAsync(string userId, UpdateUserRequest request)
@@ -344,6 +386,10 @@ namespace MapAI.Application.Services
             user.IsActive = !user.IsActive;
             user.UpdatedAt = DateTimeOffset.UtcNow;
             await _userRepository.UpdateAsync(user);
+            // An old email/refresh link must not reactivate a disabled account.
+            await _tokenRepository.DeleteByUserAndType(userId, ETokenType.EmailVerification);
+            if (!user.IsActive)
+                await _tokenRepository.DeleteByUserAndType(userId, ETokenType.RefreshToken);
         }
 
         public async Task ChangeUserRoleAsync(string userId, EUser role)

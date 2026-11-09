@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { authApi } from '../services/authService';
@@ -10,8 +10,10 @@ export default function VerifyEmail() {
   const { addToast } = useToast();
   const [status, setStatus] = useState('loading'); // loading, success, error
   const [message, setMessage] = useState('');
+  const verification = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
     const verify = async () => {
       const userId = searchParams.get('userId');
       const token = searchParams.get('token');
@@ -26,11 +28,19 @@ export default function VerifyEmail() {
       const fixedToken = token.replace(/ /g, '+');
 
       try {
-        await authApi.verifyEmail(userId, fixedToken);
+        // StrictMode replays effects in development. Reuse the same request so
+        // a one-use verification token is not submitted twice.
+        const key = JSON.stringify([userId, fixedToken]);
+        if (verification.current?.key !== key) {
+          verification.current = { key, promise: authApi.verifyEmail(userId, fixedToken) };
+        }
+        await verification.current.promise;
+        if (cancelled) return;
         setStatus('success');
         setMessage('Tài khoản của bạn đã được kích hoạt thành công! Giờ đây bạn có thể đăng nhập vào hệ thống.');
         addToast('Xác thực email thành công!', 'success');
       } catch (error) {
+        if (cancelled) return;
         setStatus('error');
         setMessage(error.message || 'Đã có lỗi xảy ra trong quá trình xác thực.');
         addToast(error.message || 'Xác thực thất bại', 'error');
@@ -38,6 +48,7 @@ export default function VerifyEmail() {
     };
 
     verify();
+    return () => { cancelled = true; };
   }, [searchParams, addToast]);
 
   return (
@@ -84,7 +95,7 @@ export default function VerifyEmail() {
         </p>
 
         {status !== 'loading' && (
-          <motion.div
+          <motion.div className="space-y-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
@@ -96,6 +107,7 @@ export default function VerifyEmail() {
               <span>Đi đến Đăng nhập</span>
               <ArrowRight size={16} />
             </Link>
+            {status === 'error' && <p className="text-sm text-slate-400">Bạn có thể gửi lại email xác thực từ trang đăng nhập.</p>}
           </motion.div>
         )}
 
