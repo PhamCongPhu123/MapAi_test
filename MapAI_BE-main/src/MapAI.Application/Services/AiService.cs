@@ -3,6 +3,7 @@ using System.Globalization;
 using MapAI.Application.Interfaces;
 using MapAI.Domain.Models.Ai;
 using MapAI.Domain.Models.Osm;
+using MapAI.Domain.Exceptions;
 using MapAI.Infrastructure.Interfaces;
 using MapAI.Infrastructure.TemplatePrompts;
 using Microsoft.Extensions.Logging;
@@ -81,9 +82,13 @@ namespace MapAI.Application.Services
 
                 return ErrorResponse();
             }
+            catch (JsonException)
+            {
+                throw new AiProviderException(502, "AI_INVALID_RESPONSE", "Dịch vụ AI trả về dữ liệu chưa hợp lệ. Vui lòng thử lại.");
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in AskMapAIAsync");
+                _logger.LogWarning("AI request failed ({FailureType}).", ex.GetType().Name);
                 throw;
             }
         }

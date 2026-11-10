@@ -117,3 +117,48 @@ test('untrusted station names stay text in map popups', async ({ page, context }
   await expect(page.locator('.maplibregl-popup-content img')).toHaveCount(0);
   expect(await page.evaluate(() => window.__mapXss)).toBeUndefined();
 });
+
+test('invalid Gemini key is explained and failed replies are excluded when chat recovers', async ({ page, context }) => {
+  const state = await setup(page, context);
+  const requests = [];
+  await page.route('**/api/v1/ai/ask', route => {
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    return route.fulfill(requests.length === 1
+      ? { status: 503, json: { code: 'AI_KEY_INVALID', message: 'Provider fixture must not be displayed' } }
+      : { json: { message: 'Đang phóng to bản đồ.', action: { type: 'ZOOM_IN' } } });
+  });
+  await ask(page, 'Giới thiệu về Cầu Rồng');
+  await expect(page.getByText(/Khóa truy cập Gemini không hợp lệ hoặc đã hết hạn/)).toBeVisible();
+  await expect(page.getByText('Provider fixture must not be displayed')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Phóng to bản đồ', exact: true }).click();
+  await expect(page.getByText('Đã phóng to bản đồ.', { exact: true })).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[1].chatHistory.some(message => message.text === 'Giới thiệu về Cầu Rồng')).toBe(true);
+  expect(requests[1].chatHistory.some(message => message.text.includes('Khóa truy cập Gemini'))).toBe(false);
+  expect(state.searches).toHaveLength(0);
+  expect(state.directions).toHaveLength(0);
+});
+
+test('legacy invalid-key response is explained without exposing its raw exception', async ({ page, context }) => {
+  await setup(page, context);
+  await page.route('**/api/v1/ai/ask', route => route.fulfill({ status: 500, json: {
+    message: 'An error occurred while processing your request with MapAI.',
+    error: 'Gemini API error: BadRequest API_KEY_INVALID raw-secret-fixture',
+  } }));
+  await ask(page, 'Giới thiệu về Cầu Rồng');
+  await expect(page.getByText(/Khóa truy cập Gemini không hợp lệ hoặc đã hết hạn/)).toBeVisible();
+  await expect(page.getByText(/raw-secret-fixture|Xin lỗi, em đang gặp chút trục trặc/)).toHaveCount(0);
+});
+
+test('chat distinguishes backend connectivity failure from malformed AI output', async ({ page, context }) => {
+  await setup(page, context);
+  let calls = 0;
+  await page.route('**/api/v1/ai/ask', route => ++calls === 1
+    ? route.abort('connectionrefused')
+    : route.fulfill({ json: { suggestions: [] } }));
+  await ask(page, 'Giới thiệu về Cầu Rồng');
+  await expect(page.getByText(/Không kết nối được máy chủ MapAI/)).toBeVisible();
+  await ask(page, 'Thử lại câu hỏi');
+  await expect(page.getByText('Dịch vụ AI trả về dữ liệu chưa hợp lệ. Vui lòng thử lại.', { exact: true })).toBeVisible();
+});

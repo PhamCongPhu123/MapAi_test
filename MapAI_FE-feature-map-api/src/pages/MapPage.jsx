@@ -180,6 +180,8 @@ const MapPage = () => {
         id: crypto.randomUUID(),
         type: 'ai',
         text: response.message,
+        error: Boolean(response.error),
+        errorCode: response.errorCode,
         location: response.location,
         suggestions: response.suggestions,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

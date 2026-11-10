@@ -6,6 +6,8 @@
 
 🤖 **AI điều khiển bản đồ:** Xem [API tìm gần nhất, chỉ đường và các lệnh bản đồ](../MAP_AI_TOOLS.md).
 
+🔑 **Cấu hình ChatAI:** Khi Gemini báo khóa không hợp lệ, xem [cách tạo khóa riêng, lưu bằng .NET User Secrets và chạy lại backend](../MapAI_BE-main/AI_CHAT_SETUP.md).
+
 🔐 **Đăng ký/đăng nhập:** Người dùng tự xác thực email, không cần admin duyệt. Xem [cách xác thực, gửi lại email và cấu hình gửi thư](../MapAI_BE-main/AUTH_INTEGRATION.md).
 
 🗺️ **Bản đồ đường phố và GPS:** Bản đồ OpenFreeMap không cần API key, có nguồn đường phố dự phòng và ô chọn nguồn. Xem [cách bật định vị trên Windows và kiểm tra bản đồ](MAP_AND_LOCATION.md).

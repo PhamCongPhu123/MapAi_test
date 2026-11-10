@@ -68,6 +68,8 @@ Các action mới: `NEAREST_SEARCH`, `SEARCH_POIS`, `ROUTE_TO_NEAREST`, `ZOOM_IN
 
 ## Cấu hình kết nối
 
+Nếu ChatAI báo lỗi khóa Gemini hoặc luôn trả lời lỗi kết nối, xem [hướng dẫn cấu hình khóa riêng và kiểm tra ChatAI](MapAI_BE-main/AI_CHAT_SETUP.md).
+
 Backend cần truy cập HTTPS đến `overpass-api.de`, `nominatim.openstreetmap.org`, `routing.openstreetmap.de`; các yêu cầu AI nâng cao cần `generativelanguage.googleapis.com` và `GeminiConfig:ApiKey`. Giữ API key trên backend, không đưa vào biến `VITE_*`.
 
 Môi trường cloud hiện hạn chế các tên miền này. Các bài kiểm tra dùng provider/model giả lập; chưa kiểm thử trực tiếp kết quả Overpass, định tuyến OSRM và suy luận Gemini trên dịch vụ thật. Khi chạy backend trên máy cá nhân, kiểm tra kết nối các dịch vụ trên để dùng dữ liệu thật.

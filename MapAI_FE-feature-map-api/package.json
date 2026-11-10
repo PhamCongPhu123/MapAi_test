@@ -15,7 +15,8 @@
     "ios:open": "cap open ios",
     "test:mobile:e2e": "playwright test",
     "test:map-actions": "node --test tests/map-actions.test.mjs",
-    "test:map-display": "node --test tests/map-display.test.mjs"
+    "test:map-display": "node --test tests/map-display.test.mjs",
+    "test:ai-errors": "node --test tests/ai-errors.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
