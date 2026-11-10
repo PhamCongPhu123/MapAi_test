@@ -24,7 +24,7 @@ test('keyless map loads street tiles and preserves longitude/latitude when selec
   page.on('request', request => requests.push(request.url()));
   await page.goto('/map?lat=16.0612&lng=108.2275');
   await expect(page.locator('.maplibregl-ctrl-attrib')).toContainText('OpenStreetMap contributors');
-  await expect.poll(() => requests.some(url => url.startsWith('https://tile.openstreetmap.org/'))).toBe(true);
+  await expect.poll(() => requests.some(url => url.startsWith('https://tiles.openfreemap.org/'))).toBe(true);
   expect(requests.some(url => url.includes('demotiles.maplibre.org'))).toBe(false);
   // Wait for flyTo, then the contribution form must read the exact camera center.
   await expect(page.locator('.maplibregl-marker')).toBeVisible();
@@ -79,21 +79,71 @@ test('denied desktop location has a persistent recovery action and never retains
 });
 
 test('street tile failures are visible and the retry action restores the basemap with its places', async ({ page }) => {
-  await page.route('https://tile.openstreetmap.org/**', async route => route.fulfill(await page.evaluate(() => window.__tilesAllowed)
+  let allowTiles = false;
+  await page.route('https://tiles.openfreemap.org/**', route => route.fulfill({ status: 503, body: 'unavailable', headers: { 'access-control-allow-origin': '*' } }));
+  await page.route('https://tile.openstreetmap.org/**', route => route.fulfill({ status: 403, body: 'forbidden', headers: { 'access-control-allow-origin': '*' } }));
+  await page.route('https://a.tile.openstreetmap.fr/**', route => route.fulfill(allowTiles
     ? { body: rasterTile, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' } }
     : { status: 503, body: 'unavailable', headers: { 'access-control-allow-origin': '*' } }));
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/map');
-  await expect(page.locator('.map-notices')).toContainText('Không tải được bản đồ đường phố');
-  await page.getByRole('button', { name: 'Thử tải lại bản đồ' }).evaluate(button => button.addEventListener('click', () => { window.__tilesAllowed = true; }, { capture: true, once: true }));
-  await page.getByRole('button', { name: 'Thử tải lại bản đồ' }).click();
+  await expect(page.locator('.map-notices')).toContainText('Chưa tải được bản đồ từ các nguồn đã thử');
+  await expect(page.locator('.map-notices')).toContainText('HTTP 403');
+  allowTiles = true;
+  await page.getByRole('combobox', { name: 'Nguồn bản đồ', exact: true }).selectOption('hot');
   await expect(page.locator('.map-notices')).toHaveCount(0);
   const canvas = page.locator('.maplibregl-canvas');
   const bounds = await canvas.boundingBox();
   await canvas.click({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
   await expect(page.locator('.place-detail-card')).toContainText('Cafe kiểm thử');
   expect(errors).toEqual([]);
+});
+
+test('OpenFreeMap failure automatically uses the independent street server and keeps places clickable', async ({ page }) => {
+  await page.route('https://tiles.openfreemap.org/**', route => route.fulfill({ status: 503, body: 'unavailable', headers: { 'access-control-allow-origin': '*' } }));
+  const hosts = [];
+  page.on('request', request => hosts.push(new URL(request.url()).hostname));
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/map');
+  await expect(page.locator('.maplibregl-ctrl-attrib')).toContainText('OpenStreetMap France');
+  await expect(page.locator('.map-notices')).toHaveCount(0);
+  expect(hosts).toContain('a.tile.openstreetmap.fr');
+  expect(hosts).not.toContain('tile.openstreetmap.org');
+  const canvas = page.locator('.maplibregl-canvas');
+  const bounds = await canvas.boundingBox();
+  await canvas.click({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
+  await expect(page.locator('.place-detail-card')).toContainText('Cafe kiểm thử');
+  expect(errors).toEqual([]);
+});
+
+test('changing the street provider keeps the selected route, its markers and origin', async ({ page }, testInfo) => {
+  await page.addInitScript(() => sessionStorage.setItem('user_location', JSON.stringify({ name: 'Vị trí của tôi', lat: 16.06, lng: 108.22, timestamp: Date.now() })));
+  let requests = 0;
+  await page.route('**/api/v1/map/direction', route => {
+    requests++;
+    return route.fulfill({ headers: { 'access-control-allow-origin': '*' }, json: {
+      distance: 180, duration: 60, geometry: { type: 'LineString', coordinates: [[108.22, 16.06], [108.2205, 16.0605], [108.221, 16.061]] },
+      legs: [{ steps: [{ distance: 180, duration: 60, name: 'Đường thử nghiệm', maneuver: { type: 'depart', location: [108.22, 16.06] } }] }],
+    } });
+  });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/map');
+  await expect(page.getByRole('combobox', { name: 'Nguồn bản đồ' })).toHaveValue('openfreemap');
+  await page.waitForFunction(() => Boolean(window.startDirectionsFromPopup));
+  await page.evaluate(() => window.startDirectionsFromPopup('Điểm đến thử', 108.221, 16.061));
+  await expect.poll(() => requests).toBe(1);
+  await expect(page.locator('.maplibregl-marker')).toHaveCount(2);
+  await page.getByRole('combobox', { name: 'Nguồn bản đồ' }).selectOption('hot');
+  await expect(page.locator('.maplibregl-ctrl-attrib')).toContainText('OpenStreetMap France');
+  await expect(page.locator('.directions-panel input').first()).toHaveValue('Vị trí của tôi');
+  await expect(page.locator('.directions-panel input').last()).toHaveValue('Điểm đến thử');
+  await expect(page.locator('.maplibregl-marker')).toHaveCount(2);
+  expect(requests).toBe(1);
+  expect(errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('route-after-provider.png') });
 });
 
 test('MapTiler failure switches to street tiles without losing the community overlay', async ({ page }) => {

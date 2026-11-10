@@ -62,6 +62,11 @@ button, a, input, textarea {
   overflow-y: auto;
 }
 
+@media (max-height: 500px) {
+  .map-controls { gap: .25rem; }
+  .map-controls button { padding: .5rem; }
+}
+
 .admin-layout {
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
 }

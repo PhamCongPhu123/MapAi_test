@@ -2,11 +2,22 @@
 
 ## Bản đồ đường phố
 
-Không cần MapTiler key để xem đường phố, tên đường và các công trình được OpenStreetMap ghi nhận. Khi `VITE_MAPTILER_KEY` trống hoặc là placeholder, ứng dụng dùng raster tiles `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, giữ attribution OpenStreetMap. Bản đồ demo MapLibre trước đây chỉ chứa ranh giới quốc gia với đường bờ biển đơn giản hóa; phóng to Đà Nẵng sẽ không có đường phố và có thể làm các điểm trên đất liền trông như ở ngoài biển.
+Ứng dụng mặc định dùng **OpenFreeMap Liberty** (`https://tiles.openfreemap.org/styles/liberty`), là bản đồ vector từ dữ liệu OpenStreetMap, không cần đăng ký hoặc API key. Nguồn này cung cấp đường phố, nhãn và dữ liệu công trình mà OpenStreetMap đã ghi nhận. Tâm khởi tạo vẫn ở Đà Nẵng `[108.22, 16.06]`.
 
-Nếu cấu hình MapTiler key hợp lệ, ứng dụng dùng streets-v2. Khi lớp này lỗi, ứng dụng chuyển sang raster OpenStreetMap. Thay style hoặc thử tải lại phải khôi phục lớp địa điểm MapAI và tuyến đường đang có. Lỗi tải tile có cảnh báo và nút thử lại, không hiển thị bản đồ demo như thể đã tải bản đồ đường phố thành công.
+Khi một nguồn bị lỗi hoặc không nhận được tile đầu tiên sau 12 giây, ứng dụng tự thử nguồn tiếp theo:
 
-Raster hiển thị dữ liệu công trình ở dạng 2D; chế độ 3D lúc này thay đổi góc camera. Địa hình 3D của MapTiler cần key/quyền sử dụng phù hợp. Cả hai nguồn đều cần Internet; mức độ chi tiết phụ thuộc dữ liệu nhà cung cấp ở từng vùng. Không tải trước hàng loạt hay đóng gói các tile OpenStreetMap để dùng offline.
+1. MapTiler streets-v2, nếu đã cấu hình key công khai hợp lệ.
+2. OpenFreeMap Liberty.
+3. Raster **HOT / OpenStreetMap France**: `https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png`.
+4. Raster OpenStreetMap: `https://tile.openstreetmap.org/{z}/{x}/{y}.png`.
+
+Có Internet không bảo đảm mọi máy chủ tile đều truy cập được. Lỗi 403, 429, kết nối, hoặc request treo của một nguồn không làm ứng dụng lặp vô hạn trên nguồn đó: mỗi nguồn chỉ được thử tự động một lần trong một chu kỳ. Nếu tất cả đều lỗi, thông báo liệt kê tên nguồn/mã HTTP khi có, không đổ lỗi chung rằng máy mất Internet. Lỗi đến muộn từ nguồn đã bỏ qua không được làm hỏng nguồn mới.
+
+Ô **Nguồn bản đồ** ở góc dưới phải cho phép đổi nguồn trực tiếp. Khi gặp lỗi, ô này chuyển vào hộp thông báo để vẫn thao tác được. Nút **Thử tải lại bản đồ** bắt đầu chu kỳ thử lại từ nguồn đang chọn. Camera, các marker GPS/địa điểm, điểm xuất phát/đích đến và tuyến đường được giữ khi đổi lớp nền.
+
+Raster hiển thị công trình ở dạng 2D; chế độ 3D lúc này thay đổi góc camera. Địa hình MapTiler chỉ được thêm khi đang dùng nguồn MapTiler có key, không gọi nhầm endpoint địa hình trả phí khi đã chuyển sang OpenFreeMap/raster. Tất cả nguồn đều cần Internet và giữ attribution phù hợp. Không tải trước hàng loạt hoặc đóng gói các tile OpenStreetMap để dùng offline.
+
+Nguồn demo MapLibre trước đây chỉ có ranh giới quốc gia đơn giản hóa, không đủ dữ liệu đường phố ở Đà Nẵng. Ứng dụng không dùng nguồn demo đó.
 
 ## Tọa độ địa điểm
 
@@ -41,7 +52,7 @@ npm run test:mobile
 npm run test:mobile:e2e
 ```
 
-Kiểm thử UI mặc định dùng raster tile trung tính làm fixture và các vị trí định sẵn để kiểm tra renderer, thứ tự tọa độ, permission/timeout, retry và khôi phục lớp địa điểm. Fixture không đại diện cho dữ liệu bản đồ ngoài Internet hoặc tín hiệu GPS của máy thật.
+Kiểm thử UI dùng style/tile trung tính làm fixture và các vị trí định sẵn để kiểm tra renderer, thứ tự tọa độ, permission/timeout, chuyển nguồn, mã lỗi, retry và khôi phục lớp địa điểm/tuyến đường. Fixture không đại diện cho dữ liệu bản đồ ngoài Internet hoặc tín hiệu GPS của máy thật.
 
 Kiểm tra thêm nhánh lỗi MapTiler (key giả chỉ dùng trong kiểm thử):
 
@@ -51,4 +62,4 @@ npm run test:mobile:e2e -- tests/e2e/map-display.spec.js --grep "MapTiler failur
 Remove-Item Env:MAPAI_TEST_MAPTILER_KEY
 ```
 
-Trong môi trường cloud hiện tại, kết nối đến `tile.openstreetmap.org` bị proxy chặn (`CONNECT 403`), nên chưa xác nhận được ảnh tile trực tiếp từ nhà cung cấp tại đây. Các bài kiểm thử dùng fixture, không kiểm chứng được quyền định vị hay độ chính xác thực tế trên Windows của người dùng.
+Môi trường cloud hiện tại chặn các máy chủ bản đồ ngoài danh sách cho phép (`CONNECT 403`), nên các bài kiểm thử dùng fixture. Trong phiên xử lý lỗi, người dùng đã xác nhận trên Windows rằng OpenFreeMap trả được style JSON và OpenStreetMap France trả được ảnh đường phố. Các bài kiểm thử không đo được độ chính xác GPS thực tế của máy người dùng.

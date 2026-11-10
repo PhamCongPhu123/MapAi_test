@@ -8,7 +8,7 @@
 
 🔐 **Đăng ký/đăng nhập:** Người dùng tự xác thực email, không cần admin duyệt. Xem [cách xác thực, gửi lại email và cấu hình gửi thư](../MapAI_BE-main/AUTH_INTEGRATION.md).
 
-🗺️ **Bản đồ đường phố và GPS:** Không cần MapTiler key để xem bản đồ OpenStreetMap. Xem [cách bật định vị trên Windows và kiểm tra bản đồ](MAP_AND_LOCATION.md).
+🗺️ **Bản đồ đường phố và GPS:** Bản đồ OpenFreeMap không cần API key, có nguồn đường phố dự phòng và ô chọn nguồn. Xem [cách bật định vị trên Windows và kiểm tra bản đồ](MAP_AND_LOCATION.md).
 
 Chào mừng bạn đến với **MapAI** — trải nghiệm bản đồ thông minh kết hợp giữa thế giới 3D sống động và khả năng hỗ trợ bằng AI. Với MapAI, việc khám phá thành phố, đặc biệt là Đà Nẵng, trở nên dễ dàng, chính xác và đầy cảm hứng hơn.
 aaaa

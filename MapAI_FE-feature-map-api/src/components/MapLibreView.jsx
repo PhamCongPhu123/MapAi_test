@@ -13,7 +13,7 @@ import ContributionDialog from './Community/ContributionDialog';
 import { MapPin } from 'lucide-react';
 import { createPlacePopup } from '../utils/mapPopup';
 import { toLngLat, placesGeoJSON } from '../utils/mapCoordinates';
-import { basemapStyle, mapTilerKey, monitorBasemap } from '../services/mapBasemap';
+import { basemapStyle, basemapProviders, mapTilerKey, monitorBasemap } from '../services/mapBasemap';
 
 // Import Components
 import PlaceDetailPanel from './PlaceDetailPanel';
@@ -40,6 +40,17 @@ const CATEGORY_CONFIG = {
   'default': { color: '#95afc0', icon: 'MapPin' }
 };
 
+function BasemapSelector({ value, providers, onSelect }) {
+  return <label className="block">
+    <span className="sr-only">Nguồn bản đồ</span>
+    <select aria-label="Nguồn bản đồ" title="Nguồn bản đồ" value={value || providers[0].id}
+      onChange={event => onSelect(event.target.value)}
+      className="map-source-select w-44 max-w-full rounded-xl border border-white/20 bg-slate-950 p-2 text-xs text-white shadow-xl">
+      {providers.map(provider => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+    </select>
+  </label>;
+}
+
 const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigating, setIsNavigating, onLocationFound }) => {
   const [searchParams] = useSearchParams();
   const mapContainer = useRef(null);
@@ -51,6 +62,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
   const [bearing, setBearing] = useState(0);
   const [mapError, setMapError] = useState(null);
   const [mapWarning, setMapWarning] = useState(null);
+  const [mapProvider, setMapProvider] = useState(null);
   const [locationIssue, setLocationIssue] = useState(null);
   const [styleRevision, setStyleRevision] = useState(0);
   const basemap = useRef(null);
@@ -472,8 +484,9 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       basemap.current = monitorBasemap(currentMap, MAPTILER_KEY, {
         onChanging: () => setIsLoaded(false),
         onWarning: setMapWarning,
-        onReady: ({ vector }) => {
-          if (vector && MAPTILER_KEY && !currentMap.getSource('maptiler-terrain')) {
+        onProviderChange: setMapProvider,
+        onReady: ({ provider }) => {
+          if (provider === 'maptiler' && MAPTILER_KEY && !currentMap.getSource('maptiler-terrain')) {
             currentMap.addSource('maptiler-terrain', { type: 'raster-dem', url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${encodeURIComponent(MAPTILER_KEY)}`, tileSize: 256 });
           }
           setIsLoaded(true);
@@ -709,12 +722,16 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       </AnimatePresence>
       <MapStatusOverlays isLoaded={isLoaded} mapError={mapError} isDetailLoading={isDetailLoading} />
       {(mapWarning || locationIssue) && <div className="map-notices absolute z-[70] rounded-2xl border border-white/20 bg-slate-950/95 p-4 text-sm text-white shadow-xl">
-        {mapWarning && <div role="alert" className="space-y-2"><p>{mapWarning}</p><button className="text-blue-300 font-bold" onClick={() => basemap.current?.reload()}>Thử tải lại bản đồ</button></div>}
+        {mapWarning && <div role="alert" className="space-y-2"><p>{mapWarning}</p>
+          <BasemapSelector value={mapProvider?.id} providers={basemapProviders(MAPTILER_KEY)} onSelect={id => basemap.current?.select(id)} />
+          <button className="text-blue-300 font-bold" onClick={() => basemap.current?.reload()}>Thử tải lại bản đồ</button>
+        </div>}
         {locationIssue && <div role="alert" className="space-y-2 mt-2"><p>{locationIssue}</p><button disabled={isLocating} className="text-blue-300 font-bold" onClick={() => handleLocateUser(true)}>Thử định vị lại</button></div>}
       </div>}
       <div className="map-controls absolute bottom-10 right-10 z-20 flex flex-col gap-3 items-end">
         <NavigationControls map={map.current} onLocate={handleLocateUser} bearing={bearing} isUserLocating={isUserLocating} isLocating={isLocating} />
         <ViewToggle is3D={is3D} onToggle={() => handleToggleView()} />
+        {!mapWarning && <BasemapSelector value={mapProvider?.id} providers={basemapProviders(MAPTILER_KEY)} onSelect={id => basemap.current?.select(id)} />}
       </div>
       <LocationRequestPopup 
         isOpen={showLocationPopup}
