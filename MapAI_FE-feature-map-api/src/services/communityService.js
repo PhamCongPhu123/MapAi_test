@@ -14,6 +14,13 @@ export const communityApi = {
   search: (title, signal) => call(`?title=${encodeURIComponent(title)}`, { signal }),
   get: (id, signal) => call(`/${encodeURIComponent(id)}`, { signal }),
   submit: (data) => call('/contributions', { method: 'POST', body: JSON.stringify(data) }),
+  uploadImage: async (file) => {
+    const body = new FormData();
+    body.append('file', file);
+    const result = await call('/upload-thumbnail', { method: 'POST', headers: { 'Content-Type': undefined }, body });
+    if (!result.url) throw new Error('Máy chủ chưa trả về đường dẫn ảnh. Vui lòng thử lại.');
+    return result.url;
+  },
   mine: (page = 1, signal) => call(`/contributions/mine?page=${page}`, { signal }),
   pending: (page = 1, signal) => call(`/contributions/pending?page=${page}`, { signal }),
   moderate: (id, status, note) => call(`/contributions/${encodeURIComponent(id)}/moderation`, { method: 'PUT', body: JSON.stringify({ status, note }) }),

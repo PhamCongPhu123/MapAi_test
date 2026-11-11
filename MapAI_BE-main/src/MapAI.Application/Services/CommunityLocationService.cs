@@ -17,6 +17,10 @@ public class CommunityLocationService(MapAIContext context) : ICommunityLocation
         var lat = request.Latitude!.Value;
         var lng = request.Longitude!.Value;
         if (!double.IsFinite(lat) || !double.IsFinite(lng)) throw new ArgumentException("Tọa độ không hợp lệ.");
+        if (request.Thumbnail != null &&
+            (!Uri.TryCreate(request.Thumbnail, UriKind.Absolute, out var imageUri) ||
+             (imageUri.Scheme != Uri.UriSchemeHttp && imageUri.Scheme != Uri.UriSchemeHttps)))
+            throw new ArgumentException("Đường dẫn ảnh không hợp lệ.");
         var normalizedTitle = title.ToLowerInvariant();
         var duplicate = await context.Locations.AnyAsync(l => !l.IsDeleted && l.Status != LocationStatus.Rejected
             && l.Title.ToLower() == normalizedTitle
@@ -26,6 +30,8 @@ public class CommunityLocationService(MapAIContext context) : ICommunityLocation
         {
             Title = title, Address = request.Address.Trim(), Description = request.Description?.Trim(),
             Category = request.Category, Latitude = lat, Longitude = lng,
+            Thumbnail = request.Thumbnail,
+            PhotosJson = request.Thumbnail == null ? null : System.Text.Json.JsonSerializer.Serialize(new[] { request.Thumbnail }),
             Status = LocationStatus.Pending, IsUserContribution = true, SubmittedById = userId,
             Rating = null, TotalReviews = 0
         };
@@ -110,6 +116,7 @@ public class CommunityLocationService(MapAIContext context) : ICommunityLocation
     private static ContributionResponse ToContribution(LocationEntity l) => new()
     {
         Id = l.Id, Title = l.Title, Address = l.Address, Description = l.Description, Category = l.Category,
+        Thumbnail = l.Thumbnail,
         Latitude = l.Latitude, Longitude = l.Longitude, Status = l.Status, CreatedAt = l.CreatedAt,
         SubmittedByName = l.SubmittedBy?.FullName, ModerationNote = l.ModerationNote, ModeratedAt = l.ModeratedAt
     };

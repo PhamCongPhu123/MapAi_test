@@ -168,6 +168,59 @@ try
     await Post("resend-verification", new { email = retryUser.Email }, 200);
     await Post("resend-verification", new { email = "unknown@example.invalid" }, 200);
     Check(mail.Messages.Count == sent, "Active and unknown emails return generic success without sending mail");
+    // Password recovery uses the same real database and captures only outgoing email.
+    var recoveryLogin = await Post("login", new { email = retryUser.Email, password }, 200);
+    var oldAccess = recoveryLogin["accessToken"]!.GetValue<string>();
+    var oldRefresh = recoveryLogin["refreshToken"]!.GetValue<string>();
+    var recoveryResponse = await Post("forgot-password", new { email = retryUser.Email }, 200);
+    var recoveryLink = new Uri(mail.LastLink);
+    Check(recoveryLink.AbsolutePath == "/reset-password", "Recovery email points to the reset-password page");
+    var recoveryQuery = QueryHelpers.ParseQuery(recoveryLink.Query);
+    var recoveryToken = recoveryQuery["token"].ToString();
+    var resetRecord = await db.AccountTokens.AsNoTracking().SingleAsync(t => t.UserId == retryUser.Id && t.Type == ETokenType.PasswordReset);
+    Check(HashHelper.Verify(recoveryToken, resetRecord.TokenHash) && resetRecord.TokenHash != recoveryToken, "Only a hash of the recovery token is stored");
+    Check(resetRecord.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(59) && resetRecord.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(60), "Recovery link has a 60 minute lifetime");
+    var sentBeforeUnknown = mail.Messages.Count;
+    var unknownRecovery = await Post("forgot-password", new { email = "unknown@example.invalid" }, 200);
+    Check(unknownRecovery["message"]!.GetValue<string>() == recoveryResponse["message"]!.GetValue<string>() && mail.Messages.Count == sentBeforeUnknown, "Recovery does not reveal whether an email is registered");
+    await Post("reset-password", new { userId = retryUser.Id, token = "incorrect", newPassword = "replacement-password" }, 400);
+    await Post("reset-password", new { userId = retryUser.Id, token = recoveryToken, newPassword = "123" }, 400);
+    using var firstReset = await client.PostAsJsonAsync("/api/v1/auth/reset-password", new { userId = retryUser.Id, token = recoveryToken, newPassword = "first-new-password" });
+    using var secondReset = await client.PostAsJsonAsync("/api/v1/auth/reset-password", new { userId = retryUser.Id, token = recoveryToken, newPassword = "second-new-password" });
+    Check(firstReset.StatusCode == HttpStatusCode.OK && secondReset.StatusCode == HttpStatusCode.BadRequest, "A recovery link can be consumed only once");
+    Check(!await db.AccountTokens.AnyAsync(t => t.UserId == retryUser.Id && (t.Type == ETokenType.PasswordReset || t.Type == ETokenType.RefreshToken)), "Reset consumes its token and revokes refresh sessions together");
+    await Post("login", new { email = retryUser.Email, password }, 401);
+    await Post("refresh", new { userId = retryUser.Id, refreshToken = oldRefresh }, 401);
+    await Post("login", new { email = retryUser.Email, password = "first-new-password" }, 200);
+    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", oldAccess);
+    using (var me = await client.GetAsync("/api/v1/auth/me"))
+        Check(me.StatusCode == HttpStatusCode.Unauthorized, "Old access token remains invalid after a new login");
+    client.DefaultRequestHeaders.Authorization = null;
+
+    await Post("forgot-password", new { email = retryUser.Email }, 200);
+    var expiredToken = QueryHelpers.ParseQuery(new Uri(mail.LastLink).Query)["token"].ToString();
+    await db.AccountTokens.Where(t => t.UserId == retryUser.Id && t.Type == ETokenType.PasswordReset)
+        .ExecuteUpdateAsync(s => s.SetProperty(t => t.ExpiresAt, DateTimeOffset.UtcNow.AddMinutes(-1)));
+    await Post("reset-password", new { userId = retryUser.Id, token = expiredToken, newPassword = "expired-must-not-win" }, 400);
+    mail.FailNext = true;
+    await Post("forgot-password", new { email = retryUser.Email }, 503);
+    await Post("forgot-password", new { email = retryUser.Email }, 200);
+    var concurrentToken = QueryHelpers.ParseQuery(new Uri(mail.LastLink).Query)["token"].ToString();
+    var resetTasks = new[]
+    {
+        client.PostAsJsonAsync("/api/v1/auth/reset-password", new { userId = retryUser.Id, token = concurrentToken, newPassword = "concurrent-first-password" }),
+        client.PostAsJsonAsync("/api/v1/auth/reset-password", new { userId = retryUser.Id, token = concurrentToken, newPassword = "concurrent-second-password" })
+    };
+    var resetResults = await Task.WhenAll(resetTasks);
+    try
+    {
+        Check(resetResults.Count(r => r.StatusCode == HttpStatusCode.OK) == 1 && resetResults.Count(r => r.StatusCode == HttpStatusCode.BadRequest) == 1, "Concurrent reset requests produce exactly one successful password change");
+        var winningPassword = resetResults[0].StatusCode == HttpStatusCode.OK ? "concurrent-first-password" : "concurrent-second-password";
+        await Post("login", new { email = retryUser.Email, password = winningPassword }, 200);
+    }
+    finally { foreach (var response in resetResults) response.Dispose(); }
+    using (var limited = await client.PostAsJsonAsync("/api/v1/auth/forgot-password", new { email = retryUser.Email }))
+        Check(limited.StatusCode == HttpStatusCode.TooManyRequests, "Recovery limits email requests after five attempts per minute");
     Console.WriteLine($"PASS: {passed} authentication assertions against real HTTP/JWT/PostgreSQL (captured email, no external SMTP).");
 }
 finally

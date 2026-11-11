@@ -228,7 +228,7 @@ export default function Login() {
                   <button 
                     type="button"
                     onClick={() => navigate("/forgot-password")}
-                    className="text-[10px] font-black text-blue-500 hover:text-blue-400 flex items-center gap-1"
+                    className="min-h-11 text-xs font-bold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1.5"
                   >
                     <ShieldCheck size={10} /> Quên mật khẩu?
                   </button>

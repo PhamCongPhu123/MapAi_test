@@ -71,6 +71,29 @@ namespace MapAI.Infrastructure.Repositories
             return verified;
         }
 
+        public async Task<bool> CompletePasswordResetAsync(AccountTokenEntity token, string passwordHash)
+        {
+            var now = DateTimeOffset.UtcNow;
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            // Competing requests must consume the same row before either can change the password.
+            var consumed = await _context.AccountTokens.Where(t => t.Id == token.Id
+                && t.UserId == token.UserId && t.TokenHash == token.TokenHash
+                && t.Type == ETokenType.PasswordReset && !t.IsDeleted && t.ExpiresAt > now)
+                .ExecuteDeleteAsync();
+            if (consumed != 1) return false;
+
+            var updated = await _context.Users.Where(u => u.Id == token.UserId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.PasswordHash, passwordHash)
+                    .SetProperty(u => u.UpdatedAt, now));
+            if (updated != 1) return false;
+
+            await _context.AccountTokens.Where(t => t.UserId == token.UserId
+                && (t.Type == ETokenType.PasswordReset || t.Type == ETokenType.RefreshToken))
+                .ExecuteDeleteAsync();
+            await transaction.CommitAsync();
+            return true;
+        }
+
         public async Task DeleteByUserIdAsync(string userId)
         {
             await _context.AccountTokens

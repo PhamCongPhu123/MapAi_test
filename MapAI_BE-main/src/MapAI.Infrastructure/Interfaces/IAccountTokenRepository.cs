@@ -11,6 +11,7 @@ namespace MapAI.Infrastructure.Interfaces
         Task AddAsync(AccountTokenEntity token);
         Task UpdateAsync(AccountTokenEntity token);
         Task<bool> CompleteEmailVerificationAsync(AccountTokenEntity token);
+        Task<bool> CompletePasswordResetAsync(AccountTokenEntity token, string passwordHash);
         Task DeleteByUserIdAsync(string userId);
         Task DeleteByUserAndType(string userId, ETokenType type);
         Task DeleteAsync(string id);

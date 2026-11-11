@@ -195,7 +195,7 @@ namespace MapAI.Application.Services
 
         public async Task<string> UploadThumbnailAsync(Stream imageStream, string fileName, string contentType)
         {
-            var newFileName = $"location_{DateTime.UtcNow.Ticks}_{fileName}";
+            var newFileName = $"location_{Guid.NewGuid():N}{System.IO.Path.GetExtension(fileName).ToLowerInvariant()}";
             return await _storageRepository.UploadFileAsync(imageStream, newFileName, contentType, "location");
         }
 

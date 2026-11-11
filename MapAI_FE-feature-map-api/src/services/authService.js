@@ -18,7 +18,9 @@ async function authRequest(path, options, fallback) {
       'Verification token expired': 'Liên kết xác thực đã hết hạn. Vui lòng gửi lại email xác thực.',
       'Invalid verification token': 'Liên kết xác thực không hợp lệ. Vui lòng gửi lại email xác thực.',
     };
-    const message = body.message || body.detail || Object.values(body.errors || {}).flat().join(' ') || fallback;
+    const recoveryLimit = path === '/auth/forgot-password' && response.status === 429;
+    const message = recoveryLimit ? 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau một phút.'
+      : body.message || body.detail || Object.values(body.errors || {}).flat().join(' ') || fallback;
     const code = body.code || (path === '/auth/login' && response.status === 401 ? 'INVALID_CREDENTIALS'
       : message === 'Account not active' ? 'EMAIL_NOT_VERIFIED' : undefined);
     const error = new Error(code === 'INVALID_CREDENTIALS' ? 'Email hoặc mật khẩu không chính xác.' : legacyMessages[message] || message);
@@ -76,7 +78,7 @@ export const authApi = {
     const response = await authRequest('/auth/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email: email.trim() })
     }, 'Yêu cầu thất bại');
     return response;
   },

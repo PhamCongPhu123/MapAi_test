@@ -40,6 +40,9 @@ export default function ContributionList({ moderation = false, onView }) {
     {data?.items.length === 0 && <p className="text-slate-400">{moderation ? 'Không có địa điểm đang chờ duyệt.' : 'Bạn chưa gửi địa điểm nào.'}</p>}
     {data?.items.map(item => <article key={item.id} className="border border-white/10 bg-slate-900/70 rounded-2xl p-4 space-y-3">
       <div className="flex justify-between gap-3"><h3 className="font-semibold">{item.title}</h3><span className="text-sm text-blue-300">{statusLabels[item.status]}</span></div>
+      {item.thumbnail && <a href={item.thumbnail} target="_blank" rel="noopener noreferrer" aria-label={`Xem ảnh ${item.title}`} className="block">
+        <img src={item.thumbnail} alt={`Ảnh ${item.title}`} loading="lazy" className="max-h-60 w-full rounded-xl border border-white/10 bg-slate-950 object-contain" />
+      </a>}
       <p className="text-sm text-slate-300">{item.address}</p>
       <p className="text-xs text-slate-400">{item.category} · {item.latitude}, {item.longitude}</p>
       {item.description && <p className="text-sm whitespace-pre-wrap break-words">{item.description}</p>}

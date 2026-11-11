@@ -11,6 +11,8 @@ public class SubmitLocationRequest
     public string Address { get; set; } = "";
     [StringLength(2000)]
     public string? Description { get; set; }
+    [Url, StringLength(2048)]
+    public string? Thumbnail { get; set; }
     [Required, RegularExpression("^(Cafe|Ăn uống|Du lịch|Landmark|Khác|Cây xăng|ATM|Nhà thuốc|Bệnh viện|Bãi đỗ xe|Trạm sạc)$")]
     public string Category { get; set; } = "";
     [Required, Range(-90, 90)]
@@ -41,6 +43,7 @@ public class ContributionResponse
     public string Title { get; set; } = "";
     public string? Address { get; set; }
     public string? Description { get; set; }
+    public string? Thumbnail { get; set; }
     public string? Category { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }

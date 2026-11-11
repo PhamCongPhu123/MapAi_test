@@ -86,7 +86,7 @@ try
     object Place(string title = "Cafe community", double lat = 16.06) => new
     {
         title, address = "12 Đường thử nghiệm, Đà Nẵng", category = "Cafe", description = "Địa điểm kiểm thử",
-        latitude = lat, longitude = 108.22, status = 0, submittedById = "bob", rating = 5
+        latitude = lat, longitude = 108.22, thumbnail = "https://images.example.test/place.png", status = 0, submittedById = "bob", rating = 5
     };
     async Task<(HttpStatusCode Status, JsonNode? Body)> Send(HttpMethod method, string path, UserEntity? user = null, object? body = null, int expected = 200)
     {
@@ -107,6 +107,7 @@ try
     var submitted = (await Send(HttpMethod.Post, "/contributions", alice, Place(), 201)).Body!;
     var id = submitted["id"]!.GetValue<string>();
     Check(submitted["status"]!.GetValue<int>() == 1, "Client cannot bypass moderation by sending status=approved");
+    Check(submitted["thumbnail"]!.GetValue<string>() == "https://images.example.test/place.png", "Submitted photo is preserved on the pending contribution");
     await Send(HttpMethod.Post, "/contributions", bob, Place(), 409);
     await Send(HttpMethod.Post, "/contributions", alice, Place("Quán Cộng Đồng"), 201);
     await Send(HttpMethod.Post, "/contributions", bob, Place("quán cộng đồng"), 409);
@@ -115,11 +116,14 @@ try
     Check((await Send(HttpMethod.Get, "?title=Cafe%20community")).Body!.AsArray().Count == 0, "Pending places excluded from search");
     Check((await Send(HttpMethod.Get, "/contributions/mine", alice)).Body!["items"]!.AsArray().Count == 2, "Submitter sees own pending places");
     Check((await Send(HttpMethod.Get, "/contributions/mine", bob)).Body!["items"]!.AsArray().Count == 0, "Client cannot spoof submitter ID");
-    Check((await Send(HttpMethod.Get, "/contributions/pending", admin)).Body!["totalCount"]!.GetValue<int>() == 2, "Admin sees moderation queue");
+    var queue = (await Send(HttpMethod.Get, "/contributions/pending", admin)).Body!;
+    Check(queue["totalCount"]!.GetValue<int>() == 2, "Admin sees moderation queue");
+    Check(queue["items"]!.AsArray().Any(item => item!["id"]!.GetValue<string>() == id && item["thumbnail"]!.GetValue<string>() == "https://images.example.test/place.png"), "Admin receives the photo for review");
     await Send(HttpMethod.Put, $"/{id}/reviews/me", alice, new { rating = 5 }, 404);
     await Send(HttpMethod.Put, $"/contributions/{id}/moderation", alice, new { status = 0 }, 403);
     await Send(HttpMethod.Put, $"/contributions/{id}/moderation", admin, new { status = 0 }, 204);
-    await Send(HttpMethod.Get, $"/{id}");
+    var approvedPhoto = (await Send(HttpMethod.Get, $"/{id}")).Body!;
+    Check(approvedPhoto["thumbnail"]!.GetValue<string>() == "https://images.example.test/place.png" && approvedPhoto["images"]![0]!.GetValue<string>() == "https://images.example.test/place.png", "Photo becomes publicly discoverable with the approved place");
     Check((await Send(HttpMethod.Get, "?title=Cafe%20community")).Body!.AsArray().Count == 1, "Approved contribution discoverable");
     await Send(HttpMethod.Put, $"/contributions/{id}/moderation", admin, new { status = 2, note = "Late overwrite" }, 409);
     await Send(HttpMethod.Put, $"/{id}/reviews/me", body: new { rating = 5 }, expected: 401);

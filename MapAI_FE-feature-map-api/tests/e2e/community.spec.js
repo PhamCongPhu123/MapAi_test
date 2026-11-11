@@ -1,14 +1,18 @@
 import { mockStreetTiles } from './helpers/basemap.js';
 import { test, expect } from '@playwright/test';
 
+const photoUrl = 'https://images.example.test/community-place.png';
+const photoFile = { name: 'place.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=', 'base64') };
+
 async function setup(page) {
   const state = {
     actor: { id: 'student', fullName: 'Sinh viên MapAI', role: 'User' },
     places: [{ id: 'cafe-1', title: 'Quán Cộng Đồng', category: 'Cafe', latitude: 16.06, longitude: 108.22, address: '12 Đường thử nghiệm', rating: 4.9, totalReviews: 100, images: [], tags: [] }],
-    contributions: [], reviews: [], failSave: false,
+    contributions: [], reviews: [], failSave: false, failUpload: false, failSubmit: false, uploads: 0,
   };
   await page.addInitScript(() => localStorage.setItem('accessToken', `header.${btoa(JSON.stringify({ sub: 'student' }))}.signature`));
   await mockStreetTiles(page);
+  await page.route(photoUrl, route => route.fulfill({ contentType: 'image/png', body: photoFile.buffer }));
   await page.route('**/api/v1/**', route => {
     const url = new URL(route.request().url());
     const path = url.pathname.replace('/api/v1', '');
@@ -17,7 +21,13 @@ async function setup(page) {
     const noContent = () => route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } });
     if (path === '/auth/me') return respond(state.actor);
     if (path.startsWith('/map/')) return respond({ message: 'External search unavailable' }, 503);
+    if (path === '/location/upload-thumbnail' && method === 'POST') {
+      state.uploads++;
+      expect(route.request().headers()['content-type']).toContain('multipart/form-data; boundary=');
+      return state.failUpload ? respond({ message: 'Không thể tải ảnh lên.' }, 503) : respond({ url: photoUrl });
+    }
     if (path === '/location/contributions' && method === 'POST') {
+      if (state.failSubmit) return respond({ message: 'Chưa thể gửi đóng góp. Hãy thử lại.' }, 503);
       const body = route.request().postDataJSON();
       if (state.contributions.some(place => place.title === body.title)) return respond({ message: 'Địa điểm này đã tồn tại hoặc đang chờ duyệt.' }, 409);
       const place = { ...body, id: `proposal-${state.contributions.length + 1}`, status: 1, createdAt: new Date().toISOString() };
@@ -65,7 +75,7 @@ async function setup(page) {
   return state;
 }
 
-test('submit a place using GPS and map pin, preserve draft, then see pending status', async ({ page, context }) => {
+test('submit a place using GPS and map pin, preserve draft, then see pending status', async ({ page, context }, testInfo) => {
   const state = await setup(page);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -75,24 +85,94 @@ test('submit a place using GPS and map pin, preserve draft, then see pending sta
   await page.getByRole('button', { name: '+ Thêm địa điểm', exact: true }).click();
   await page.getByLabel('Tên địa điểm', { exact: true }).fill('Quán mới gần nhà');
   await page.getByLabel('Địa chỉ', { exact: true }).fill('21 Đường cộng đồng');
+  const descriptionField = page.getByRole('region', { name: 'Mô tả địa điểm', exact: true });
+  const photoField = page.getByRole('region', { name: 'Ảnh địa điểm', exact: true });
+  await expect(descriptionField.getByRole('textbox')).toBeVisible();
+  await expect(photoField.getByLabel('Ảnh địa điểm')).toHaveAttribute('type', 'file');
+  await descriptionField.getByRole('textbox').fill('Quán có sân vườn, mở cửa từ 7 giờ.');
+  await photoField.scrollIntoViewIfNeeded();
+  await page.locator('.community-dialog').screenshot({ path: testInfo.outputPath('description-and-photo.png') });
+  await page.getByRole('region', { name: 'Ảnh địa điểm', exact: true }).getByLabel('Ảnh địa điểm').setInputFiles(photoFile);
+  await expect(page.getByAltText('Ảnh địa điểm xem trước')).toBeVisible();
+  expect(state.uploads).toBe(0);
   await page.getByRole('button', { name: 'Dùng vị trí hiện tại' }).click();
   await expect(page.getByLabel('Vĩ độ', { exact: true })).toHaveValue('16.07');
   await page.getByRole('button', { name: 'Chọn trên bản đồ' }).click();
   await expect(page.getByText('Kéo bản đồ để đặt ghim đúng vị trí địa điểm.')).toBeVisible();
   await page.getByRole('button', { name: 'Dùng vị trí ghim này' }).click();
   await expect(page.getByLabel('Tên địa điểm', { exact: true })).toHaveValue('Quán mới gần nhà');
+  await expect(page.getByAltText('Ảnh địa điểm xem trước')).toBeVisible();
   await page.getByRole('button', { name: 'Gửi địa điểm chờ duyệt' }).click();
   await expect(page.getByText('Đã gửi địa điểm, đang chờ quản trị viên duyệt.')).toBeVisible();
   expect(state.contributions[0].status).toBe(1);
+  expect(state.contributions[0].thumbnail).toBe(photoUrl);
+  expect(state.contributions[0].description).toBe('Quán có sân vườn, mở cửa từ 7 giờ.');
+  expect(state.uploads).toBe(1);
   expect(state.places).toHaveLength(1);
   await page.getByRole('button', { name: 'Hoàn tất', exact: true }).click();
   await page.getByRole('button', { name: 'Đóng góp của tôi', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Quán mới gần nhà', exact: true })).toBeVisible();
   await expect(page.getByText('Chờ duyệt', { exact: true })).toBeVisible();
+  await expect(page.getByAltText('Ảnh Quán mới gần nhà')).toBeVisible();
   await page.getByRole('button', { name: 'Đóng danh sách đóng góp' }).click();
   await page.getByRole('button', { name: 'Về trang chủ' }).click();
   await expect(page).toHaveURL(/\/$/);
   expect(errors).toEqual([]);
+});
+
+test('photo can be removed and invalid files are rejected inside the existing dialog', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/map');
+  await page.getByRole('button', { name: '+ Thêm địa điểm', exact: true }).click();
+  await page.getByRole('region', { name: 'Ảnh địa điểm', exact: true }).getByLabel('Ảnh địa điểm').setInputFiles(photoFile);
+  await expect(page.getByAltText('Ảnh địa điểm xem trước')).toBeVisible();
+  await page.getByRole('button', { name: 'Xóa ảnh', exact: true }).click();
+  await expect(page.getByAltText('Ảnh địa điểm xem trước')).toHaveCount(0);
+  await page.getByRole('region', { name: 'Ảnh địa điểm', exact: true }).getByLabel('Ảnh địa điểm').setInputFiles({ name: 'image.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg/>') });
+  await expect(page.getByRole('alert')).toContainText('Chỉ chấp nhận');
+  await page.getByRole('region', { name: 'Ảnh địa điểm', exact: true }).getByLabel('Ảnh địa điểm').setInputFiles({ ...photoFile, buffer: Buffer.alloc(5 * 1024 * 1024 + 1) });
+  await expect(page.getByRole('alert')).toContainText('tối đa 5 MB');
+  expect(state.uploads).toBe(0);
+  expect(new URL(page.url()).pathname).toBe('/map');
+});
+
+test('failed photo upload preserves the pending draft and retry reuses the uploaded photo', async ({ page }) => {
+  const state = await setup(page);
+  state.failUpload = true;
+  await page.goto('/map');
+  await page.getByRole('button', { name: '+ Thêm địa điểm', exact: true }).click();
+  await page.getByLabel('Tên địa điểm', { exact: true }).fill('Quán có ảnh');
+  await page.getByLabel('Địa chỉ', { exact: true }).fill('12 Đà Nẵng');
+  await page.getByRole('region', { name: 'Ảnh địa điểm', exact: true }).getByLabel('Ảnh địa điểm').setInputFiles(photoFile);
+  await page.getByRole('button', { name: 'Gửi địa điểm chờ duyệt' }).click();
+  await expect(page.getByRole('alert')).toContainText('Không thể tải ảnh');
+  await expect(page.getByAltText('Ảnh địa điểm xem trước')).toBeVisible();
+  await expect(page.getByLabel('Tên địa điểm', { exact: true })).toHaveValue('Quán có ảnh');
+  expect(state.contributions).toHaveLength(0);
+  state.failUpload = false;
+  state.failSubmit = true;
+  await page.getByRole('button', { name: 'Gửi địa điểm chờ duyệt' }).click();
+  await expect(page.getByRole('alert')).toContainText('Chưa thể gửi đóng góp');
+  expect(state.uploads).toBe(2);
+  state.failSubmit = false;
+  await page.getByRole('button', { name: 'Gửi địa điểm chờ duyệt' }).click();
+  await expect(page.getByText('Đã gửi địa điểm, đang chờ quản trị viên duyệt.')).toBeVisible();
+  expect(state.uploads).toBe(2);
+  expect(state.contributions[0]).toMatchObject({ status: 1, thumbnail: photoUrl });
+  expect(state.places).toHaveLength(1);
+});
+
+test('a place can still be submitted for moderation without a photo', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/map');
+  await page.getByRole('button', { name: '+ Thêm địa điểm', exact: true }).click();
+  await page.getByLabel('Tên địa điểm', { exact: true }).fill('Quán không ảnh');
+  await page.getByLabel('Địa chỉ', { exact: true }).fill('12 Đà Nẵng');
+  await page.getByRole('button', { name: 'Gửi địa điểm chờ duyệt' }).click();
+  await expect(page.getByText('Đã gửi địa điểm, đang chờ quản trị viên duyệt.')).toBeVisible();
+  expect(state.uploads).toBe(0);
+  expect(state.contributions[0]).toMatchObject({ status: 1, thumbnail: null });
+  expect(state.places).toHaveLength(1);
 });
 
 test('duplicate proposal reports an error and keeps entered details', async ({ page }) => {
@@ -170,14 +250,16 @@ test('admin approves a contribution and must provide a reason to reject another'
   const state = await setup(page);
   state.actor.role = 'Admin';
   state.contributions.push(
-    { id: 'pending-a', title: 'Cafe chờ duyệt', status: 1, address: '12 Đà Nẵng', latitude: 16.06, longitude: 108.22, createdAt: new Date().toISOString() },
+    { id: 'pending-a', title: 'Cafe chờ duyệt', thumbnail: photoUrl, status: 1, address: '12 Đà Nẵng', latitude: 16.06, longitude: 108.22, createdAt: new Date().toISOString() },
     { id: 'pending-b', title: 'Địa điểm sai', status: 1, address: '99 Đà Nẵng', latitude: 16.05, longitude: 108.23, createdAt: new Date().toISOString() },
   );
   await page.goto('/admin/contributions');
   const approved = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Cafe chờ duyệt', exact: true }) });
+  await expect(approved.getByAltText('Ảnh Cafe chờ duyệt')).toBeVisible();
   await approved.getByRole('button', { name: 'Duyệt địa điểm', exact: true }).click();
   await expect(approved).toHaveCount(0);
   expect(state.places.some(place => place.id === 'pending-a')).toBe(true);
+  expect(state.places.find(place => place.id === 'pending-a').thumbnail).toBe(photoUrl);
   const rejected = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Địa điểm sai', exact: true }) });
   await rejected.getByRole('button', { name: 'Từ chối', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('ghi lý do từ chối');

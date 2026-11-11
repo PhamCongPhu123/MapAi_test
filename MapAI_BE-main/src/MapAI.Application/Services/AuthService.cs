@@ -161,10 +161,17 @@ namespace MapAI.Application.Services
 
         public async Task<bool> ForgotPasswordAsync(string email)
         {
-            var user = await _userRepository.GetByEmailAsync(email);
-            if (user == null) throw new Exception("User not found");
+            var user = await _userRepository.GetByEmailAsync(email.Trim());
+            // Return the same result for unknown accounts so email addresses cannot be enumerated.
+            if (user == null) return true;
 
-            var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+            var frontendUrl = _config["FrontendUrl"]?.TrimEnd('/');
+            if (!Uri.TryCreate(frontendUrl, UriKind.Absolute, out var frontendUri) ||
+                (frontendUri.Scheme != Uri.UriSchemeHttp && frontendUri.Scheme != Uri.UriSchemeHttps))
+                throw new InvalidOperationException("FrontendUrl must be an absolute HTTP(S) URL.");
+
+            // 256 random bits; URL safe and below BCrypt's 72-byte input limit.
+            var rawToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
             var tokenEntity = new AccountTokenEntity
             {
                 UserId = user.Id,
@@ -176,28 +183,30 @@ namespace MapAI.Application.Services
             await _tokenRepository.DeleteByUserAndType(user.Id, ETokenType.PasswordReset);
             await _tokenRepository.AddAsync(tokenEntity);
 
-            var resetLink = BuildAccountLink("reset-password", user.Id, rawToken);
-            await _emailRepository.SendEmailAsync(user.Email, "Reset Password", $"Click here to reset your password: {resetLink}");
+            var resetLink = $"{frontendUrl}/reset-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(rawToken)}";
+            var safeLink = System.Net.WebUtility.HtmlEncode(resetLink);
+            await _emailRepository.SendEmailAsync(user.Email, "Đặt lại mật khẩu MapAI",
+                $"<p>Bạn vừa yêu cầu đặt lại mật khẩu MapAI.</p><p><a href=\"{safeLink}\">Đặt lại mật khẩu</a></p>" +
+                "<p>Liên kết có hiệu lực trong 60 phút và chỉ dùng một lần. Nếu không yêu cầu, bạn có thể bỏ qua email này.</p>");
 
             return true;
         }
 
         public async Task ResetPasswordAsync(string userId, string token, string newPassword)
         {
+            if (string.IsNullOrEmpty(newPassword) || newPassword.Length < 6 ||
+                System.Text.Encoding.UTF8.GetByteCount(newPassword) > 72)
+                throw new ArgumentException("Mật khẩu phải có ít nhất 6 ký tự và không vượt quá 72 byte UTF-8.");
+
             var entity = await _tokenRepository.GetByUserAndType(userId, ETokenType.PasswordReset);
-            if (entity == null || entity.ExpiresAt < DateTimeOffset.UtcNow)
-                throw new Exception("Reset token expired");
+            if (entity == null || entity.IsDeleted || entity.ExpiresAt <= DateTimeOffset.UtcNow)
+                throw new ArgumentException("Liên kết không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu liên kết mới.");
 
             if (!HashHelper.Verify(token, entity.TokenHash))
-                throw new Exception("Invalid reset token");
+                throw new ArgumentException("Liên kết không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu liên kết mới.");
 
-            var user = await _userRepository.GetByIdOrEmailAsync(userId);
-            if (user == null) throw new Exception("User not found");
-
-            user.PasswordHash = HashHelper.Hash(newPassword);
-            user.UpdatedAt = DateTimeOffset.UtcNow;
-            await _userRepository.UpdateAsync(user);
-            await _tokenRepository.DeleteAsync(entity.Id);
+            if (!await _tokenRepository.CompletePasswordResetAsync(entity, HashHelper.Hash(newPassword)))
+                throw new ArgumentException("Liên kết không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu liên kết mới.");
         }
 
         public async Task<LoginResponse> GoogleLoginAsync(string idToken)

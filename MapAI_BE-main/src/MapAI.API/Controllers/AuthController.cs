@@ -3,6 +3,7 @@ using MapAI.Application.Exceptions;
 using MapAI.Domain.Models.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace MapAI.API.Controllers
@@ -109,16 +110,18 @@ namespace MapAI.API.Controllers
         }
 
         [HttpPost("forgot-password")]
+        [EnableRateLimiting("password-recovery")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
         {
             try
             {
                 await _authService.ForgotPasswordAsync(request.Email);
-                return Ok(new { message = "Please check your email to reset your password." });
+                return Ok(new { message = "Nếu email đã được đăng ký, bạn sẽ nhận được liên kết đặt lại mật khẩu. Vui lòng kiểm tra cả thư mục Spam." });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                _logger.LogError(ex, "Could not send password recovery email");
+                return StatusCode(503, new { message = "Chưa thể gửi email khôi phục. Vui lòng thử lại sau." });
             }
         }
 
@@ -130,9 +133,14 @@ namespace MapAI.API.Controllers
                 await _authService.ResetPasswordAsync(request.UserId, request.Token, request.NewPassword);
                 return Ok(new { message = "Password updated successfully." });
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
                 return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not reset password");
+                return StatusCode(503, new { message = "Chưa thể đặt lại mật khẩu. Vui lòng thử lại sau." });
             }
         }
 

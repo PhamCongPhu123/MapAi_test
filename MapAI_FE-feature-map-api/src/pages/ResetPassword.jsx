@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
@@ -25,18 +25,16 @@ export default function ResetPassword() {
   const [error, setError] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   
-  const { resetPassword } = useAuth();
   const { addToast } = useToast();
+  const { resetPassword } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!userId || !token) {
-      setError("Liên kết không hợp lệ. Vui lòng kiểm tra lại email của bạn.");
-    }
-  }, [userId, token]);
+  const invalidLink = !userId || !token;
+  const displayedError = invalidLink ? "Liên kết không hợp lệ. Vui lòng yêu cầu liên kết mới." : error;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (invalidLink || isLoading) return;
     
     if (newPassword !== confirmPassword) {
       setError("Mật khẩu xác nhận không khớp.");
@@ -47,18 +45,16 @@ export default function ResetPassword() {
       setError("Mật khẩu phải có ít nhất 6 ký tự.");
       return;
     }
+    if (new TextEncoder().encode(newPassword).length > 72) {
+      setError("Mật khẩu quá dài. Vui lòng dùng mật khẩu ngắn hơn.");
+      return;
+    }
 
     setIsLoading(true);
     setError("");
 
     // Fix potential issue where '+' in token is replaced by ' ' by URLSearchParams
     const fixedToken = token ? token.replace(/ /g, '+') : token;
-
-    console.log("Reset Password Payload:", {
-      userId,
-      token: fixedToken,
-      newPassword: " (hidden) "
-    });
 
     try {
       await resetPassword({
@@ -70,10 +66,6 @@ export default function ResetPassword() {
       setIsSuccess(true);
       addToast("Đặt lại mật khẩu thành công!", "success");
       
-      // Auto redirect after 3 seconds
-      setTimeout(() => {
-        navigate("/login");
-      }, 3000);
     } catch (err) {
       const msg = err.message || "Liên kết đã hết hạn hoặc không hợp lệ.";
       setError(msg);
@@ -117,12 +109,12 @@ export default function ResetPassword() {
                 </div>
                 <h3 className="text-white font-black text-lg">Thành công!</h3>
                 <p className="text-slate-400 text-sm font-medium leading-relaxed">
-                  Mật khẩu của bạn đã được cập nhật. Hệ thống sẽ tự động chuyển hướng về trang đăng nhập sau vài giây.
+                  Mật khẩu của bạn đã được cập nhật. Hãy đăng nhập lại bằng mật khẩu mới.
                 </p>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate("/login")}
+                  onClick={() => navigate("/login", { replace: true })}
                   className="w-full py-3 bg-white text-slate-950 font-black rounded-xl text-sm transition-all"
                 >
                   Đăng nhập ngay
@@ -130,13 +122,14 @@ export default function ResetPassword() {
               </div>
             ) : (
               <div className="space-y-6">
-                {error && (
+                {displayedError && (
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
+                    role="alert"
                     className="bg-rose-500/5 border border-rose-500/20 p-3 rounded-xl flex items-center gap-3 text-rose-400 text-[11px] font-bold"
                   >
-                    <AlertCircle size={14} className="shrink-0" /> {error}
+                    <AlertCircle size={14} className="shrink-0" /> {displayedError}
                   </motion.div>
                 )}
 
@@ -145,6 +138,10 @@ export default function ResetPassword() {
                     <div className="relative group">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                       <input
+                        aria-label="Mật khẩu mới"
+                        autoComplete="new-password"
+                        minLength={6}
+                        maxLength={72}
                         type={showPassword ? "text" : "password"}
                         required
                         disabled={!userId || !token || isLoading}
@@ -155,6 +152,7 @@ export default function ResetPassword() {
                       />
                       <button
                         type="button"
+                        aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-white transition-colors"
                       >
@@ -165,6 +163,10 @@ export default function ResetPassword() {
                     <div className="relative group">
                       <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                       <input
+                        aria-label="Xác nhận mật khẩu mới"
+                        autoComplete="new-password"
+                        minLength={6}
+                        maxLength={72}
                         type={showPassword ? "text" : "password"}
                         required
                         disabled={!userId || !token || isLoading}
@@ -192,6 +194,9 @@ export default function ResetPassword() {
                     )}
                   </motion.button>
                 </form>
+                <button type="button" onClick={() => navigate('/forgot-password')} className="w-full text-sm text-blue-400 hover:text-blue-300">
+                  Yêu cầu liên kết đặt lại mật khẩu mới
+                </button>
               </div>
             )}
           </motion.div>

@@ -13,6 +13,8 @@ using MapAI.Infrastructure.Repositories;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -104,6 +106,13 @@ builder.Services.AddAuthentication(options =>
                 context.Fail("User is inactive or deleted");
                 return;
             }
+
+            var credentialVersion = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(user.PasswordHash)));
+            if (context.Principal.FindFirst("credential_version")?.Value != credentialVersion)
+            {
+                context.Fail("Credentials changed. Please login again.");
+                return;
+            }
             
             if (user.Role.ToString() != roleInToken)
             {
@@ -139,6 +148,19 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("password-recovery", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+});
+
 // Exception Handling
 builder.Services.AddExceptionHandler<MapAI.Common.Helpers.GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -159,6 +181,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -170,3 +193,5 @@ if (!app.Environment.IsDevelopment())
 app.MapControllers();
 
 app.Run();
+
+public partial class Program { }

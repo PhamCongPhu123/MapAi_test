@@ -12,10 +12,12 @@ namespace MapAI.API.Controllers
     public class LocationController : ControllerBase
     {
         private readonly ILocationService _locationService;
+        private readonly ILogger<LocationController> _logger;
 
-        public LocationController(ILocationService locationService)
+        public LocationController(ILocationService locationService, ILogger<LocationController> logger)
         {
             _locationService = locationService;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -139,22 +141,45 @@ namespace MapAI.API.Controllers
             }
         }
 
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "UserOnly")]
         [HttpPost("upload-thumbnail")]
+        [RequestSizeLimit(6 * 1024 * 1024)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 6 * 1024 * 1024)]
         public async Task<IActionResult> UploadThumbnail(IFormFile file)
         {
             try 
             {
                 if (file == null || file.Length == 0)
-                    return BadRequest(new { message = "No file uploaded." });
+                    return BadRequest(new { message = "Vui lòng chọn một ảnh." });
+
+                if (file.Length > 5 * 1024 * 1024)
+                    return BadRequest(new { message = "Ảnh không được vượt quá 5 MB." });
 
                 var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
                 var extension = Path.GetExtension(file.FileName).ToLower();
                 if (!allowedExtensions.Contains(extension))
-                    return BadRequest(new { message = "Invalid file type. Only images are allowed." });
+                    return BadRequest(new { message = "Chỉ chấp nhận ảnh JPG, PNG, GIF hoặc WebP." });
 
                 using (var stream = file.OpenReadStream())
                 {
+                    var header = new byte[12];
+                    var length = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false);
+                    var validImage = extension switch
+                    {
+                        ".jpg" or ".jpeg" => file.ContentType == "image/jpeg" && length >= 3 &&
+                            header[0] == 0xff && header[1] == 0xd8 && header[2] == 0xff,
+                        ".png" => file.ContentType == "image/png" && length >= 8 &&
+                            header.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
+                        ".gif" => file.ContentType == "image/gif" && length >= 6 &&
+                            (header.AsSpan(0, 6).SequenceEqual("GIF87a"u8) || header.AsSpan(0, 6).SequenceEqual("GIF89a"u8)),
+                        ".webp" => file.ContentType == "image/webp" && length >= 12 &&
+                            header.AsSpan(0, 4).SequenceEqual("RIFF"u8) && header.AsSpan(8, 4).SequenceEqual("WEBP"u8),
+                        _ => false
+                    };
+                    if (!validImage)
+                        return BadRequest(new { message = "Nội dung tệp không phải ảnh hợp lệ hoặc không khớp định dạng." });
+
+                    stream.Position = 0;
                     var url = await _locationService.UploadThumbnailAsync(
                         stream, 
                         file.FileName, 
@@ -165,7 +190,8 @@ namespace MapAI.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error uploading image to Supabase.", error = ex.Message });
+                _logger.LogError(ex, "Could not upload location photo");
+                return StatusCode(500, new { message = "Không thể tải ảnh lên. Vui lòng thử lại." });
             }
         }
     }

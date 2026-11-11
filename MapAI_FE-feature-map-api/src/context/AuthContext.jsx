@@ -77,7 +77,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const resetPassword = useCallback(async (data) => {
-    return await authApi.resetPassword(data);
+    const result = await authApi.resetPassword(data);
+    clearTokens();
+    setUser(null);
+    return result;
   }, []);
 
   const refreshUser = useCallback(async () => {

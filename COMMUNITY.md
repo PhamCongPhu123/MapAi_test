@@ -5,10 +5,10 @@ Tính năng dùng chung cho website và ứng dụng Capacitor. Địa điểm d
 ## Cách sử dụng
 
 1. Người dùng đăng nhập, mở **Bản đồ → + Thêm địa điểm**.
-2. Điền tên, danh mục, địa chỉ, mô tả nếu có. Chọn **Dùng vị trí hiện tại**, nhập tọa độ hoặc **Chọn trên bản đồ** rồi kéo bản đồ để đặt ghim.
+2. Điền tên, danh mục và địa chỉ. Form có hai khung riêng: **Mô tả địa điểm** để nhập nội dung và **Ảnh địa điểm** để chọn ảnh từ thiết bị; cả hai đều không bắt buộc. Có thể xem trước, đổi hoặc xóa ảnh. Chọn **Dùng vị trí hiện tại**, nhập tọa độ hoặc **Chọn trên bản đồ** rồi kéo bản đồ để đặt ghim; nội dung và ảnh đã chọn được giữ lại.
 3. Chọn **Gửi địa điểm chờ duyệt**. Địa điểm ở trạng thái chờ duyệt, chưa xuất hiện công khai.
 4. Người gửi xem trạng thái tại **Đóng góp của tôi**. Nếu bị từ chối, lý do được hiển thị tại đây; người dùng có thể kiểm tra thông tin và gửi lại một đóng góp mới.
-5. Quản trị viên vào **Admin → Duyệt địa điểm**, xem thông tin/vị trí, chọn duyệt hoặc từ chối. Từ chối bắt buộc có lý do. Một quyết định đã xử lý không bị ghi đè bởi quyết định đến sau.
+5. Quản trị viên vào **Admin → Duyệt địa điểm**, xem thông tin/vị trí và ảnh đính kèm, chọn duyệt hoặc từ chối. Từ chối bắt buộc có lý do. Một quyết định đã xử lý không bị ghi đè bởi quyết định đến sau.
 6. Địa điểm đã duyệt xuất hiện bằng chấm tím trong lớp MapAI. Mở lại bản đồ hoặc bấm **Làm mới** để tải các địa điểm vừa được duyệt. Tìm kiếm cũng gồm địa điểm trong dữ liệu MapAI, ngay cả khi nguồn tìm kiếm bên ngoài không có kết quả.
 7. Chạm địa điểm hoặc chọn từ tìm kiếm/Khám phá để mở chi tiết. Trong **Đánh giá cộng đồng MapAI**, chọn 1–5 sao và viết nhận xét nếu muốn. Người dùng có thể sửa hoặc xóa đánh giá của mình.
 
@@ -22,7 +22,7 @@ Nếu địa điểm trên bản đồ nền chưa có bản ghi MapAI, mở chi
 - Điểm cộng đồng được tính từ các đánh giá hiện có. Điểm/lượt đánh giá nhập từ nguồn cũ được giữ riêng, không bị trộn hoặc ghi đè. Trang chi tiết ghi rõ nguồn; Khám phá ưu tiên điểm cộng đồng nếu đã có đánh giá.
 - Nhận xét tối đa 2.000 ký tự; lý do duyệt/từ chối tối đa 500 ký tự. Kiểm tra tên, danh mục, địa chỉ và khoảng tọa độ ở server.
 - Kiểm tra trùng tên không phân biệt hoa/thường và tọa độ gần nhau trước khi nhận đóng góp. Admin vẫn cần kiểm tra trùng thực tế khi duyệt.
-- Không thêm ảnh giả hoặc giờ mở cửa giả cho địa điểm mới. Luồng này chưa hỗ trợ đính kèm ảnh hoặc chỉnh sửa thông tin của địa điểm đã duyệt.
+- Có thể đính kèm một ảnh JPG, PNG, GIF hoặc WebP, tối đa 5 MB. Ảnh được tải lên khi bấm gửi, lưu riêng trong trường `thumbnail` và được admin kiểm tra cùng đóng góp. Không trộn URL ảnh vào nội dung mô tả. Luồng này chưa hỗ trợ chỉnh sửa thông tin của địa điểm đã duyệt.
 
 ## Cập nhật backend và cơ sở dữ liệu
 
@@ -47,6 +47,7 @@ Tất cả đường dẫn dưới đây có tiền tố `/api/v1/location`.
 | Method | Đường dẫn | Quyền |
 | --- | --- | --- |
 | POST | `/contributions` | Đã đăng nhập |
+| POST | `/upload-thumbnail` | Đã đăng nhập, multipart với trường `file`, ảnh tối đa 5 MB |
 | GET | `/contributions/mine?page=1&pageSize=10` | Đóng góp của chính người đăng nhập |
 | GET | `/contributions/pending?page=1&pageSize=10` | Admin |
 | PUT | `/contributions/{id}/moderation` | Admin, body `{ "status": 0 hoặc 2, "note": "..." }` |
@@ -55,6 +56,8 @@ Tất cả đường dẫn dưới đây có tiền tố `/api/v1/location`.
 | DELETE | `/{id}/reviews/me` | Chỉ xóa đánh giá của người đăng nhập |
 
 Trạng thái: `0 = đã duyệt`, `1 = chờ duyệt`, `2 = từ chối`. Page size từ 1 đến 50. API công khai địa điểm hiện có đã được lọc chỉ còn địa điểm được duyệt; phản hồi thêm `communityRating`, `communityReviewCount`, `isUserContribution`.
+
+`POST /contributions` nhận nội dung mô tả qua `description`, đường dẫn ảnh đã tải qua `thumbnail`. Đóng góp luôn ở trạng thái chờ duyệt, kể cả khi client gửi thêm `status=Approved`. Ảnh được hiển thị cho người gửi trong **Đóng góp của tôi** và cho admin trong hàng đợi duyệt. Dùng bucket Supabase `location` và cấu hình backend hiện có; không đưa service-role key vào frontend. Việc bổ sung ảnh không cần migration mới.
 
 ## Kiểm thử
 
