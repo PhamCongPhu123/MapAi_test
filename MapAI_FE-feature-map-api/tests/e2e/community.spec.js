@@ -285,17 +285,19 @@ test('admin approves a contribution and must provide a reason to reject another'
     { id: 'pending-b', title: 'Địa điểm sai', status: 1, address: '99 Đà Nẵng', latitude: 16.05, longitude: 108.23, createdAt: new Date().toISOString() },
   );
   await page.goto('/admin/contributions');
-  const approved = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Cafe chờ duyệt', exact: true }) });
-  await expect(approved.getByAltText('Ảnh Cafe chờ duyệt')).toBeVisible();
-  await approved.getByRole('button', { name: 'Duyệt địa điểm', exact: true }).click();
-  await expect(approved).toHaveCount(0);
+  await page.getByRole('button', { name: 'Xem và duyệt Cafe chờ duyệt', exact: true }).click();
+  const review = page.getByRole('dialog', { name: 'Duyệt địa điểm', exact: true });
+  await expect(review.getByAltText('Ảnh Cafe chờ duyệt')).toBeVisible();
+  await review.getByRole('button', { name: 'Duyệt địa điểm', exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Xem và duyệt Cafe chờ duyệt', exact: true })).toHaveCount(0);
   expect(state.places.some(place => place.id === 'pending-a')).toBe(true);
   expect(state.places.find(place => place.id === 'pending-a').thumbnail).toBe(photoUrl);
-  const rejected = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Địa điểm sai', exact: true }) });
-  await rejected.getByRole('button', { name: 'Từ chối', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('ghi lý do từ chối');
-  await rejected.getByLabel('Ghi chú cho Địa điểm sai').fill('Địa chỉ không khớp vị trí');
-  await rejected.getByRole('button', { name: 'Từ chối', exact: true }).click();
+  await page.getByRole('button', { name: 'Xem và duyệt Địa điểm sai', exact: true }).click();
+  await review.getByRole('button', { name: 'Từ chối', exact: true }).click();
+  await expect(review.getByRole('alert')).toContainText('ghi lý do từ chối');
+  await review.getByLabel('Ghi chú cho Địa điểm sai').fill('Địa chỉ không khớp vị trí');
+  await review.getByRole('button', { name: 'Từ chối', exact: true }).click();
   await expect(page.getByText('Không có địa điểm đang chờ duyệt.')).toBeVisible();
   expect(state.contributions.find(place => place.id === 'pending-b').moderationNote).toBe('Địa chỉ không khớp vị trí');
 });
