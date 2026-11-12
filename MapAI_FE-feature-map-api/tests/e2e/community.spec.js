@@ -210,6 +210,37 @@ test('approved MapAI marker opens its stored place directly', async ({ page }) =
   await expect(page.locator('.place-detail-card').getByRole('heading', { name: 'Quán Cộng Đồng', exact: true })).toBeVisible();
 });
 
+test('fuel category button shows both stored MapAI and external stations and opens stored details by ID', async ({ page }) => {
+  const state = await setup(page);
+  state.places = [{ id: 'new-station', title: 'Trạm xăng mới gần nhà', category: 'Cây xăng',
+    latitude: 16.06, longitude: 108.22, address: '12 Đường kiểm thử', images: [], tags: [] }];
+  const searches = [];
+  const details = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.endsWith('/location/new-station')) details.push(request.url());
+  });
+  await page.route('**/api/v1/map/city-wide?*', route => {
+    searches.push(new URL(route.request().url()));
+    return route.fulfill({ json: [
+      { fsqId: 'mapai:new-station', locationId: 'new-station', source: 'mapai', type: 'mapai_place',
+        name: 'Trạm xăng mới gần nhà', lat: 16.06, lng: 108.22, categories: [{ name: 'fuel' }] },
+      { fsqId: 'osm:node:1', source: 'openstreetmap', name: 'Trạm OSM khác', lat: 16.061, lng: 108.221 },
+    ] });
+  });
+  await page.goto('/map');
+  await page.getByRole('button', { name: 'Vị trí của tôi', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Trạm xăng', exact: true }).click();
+  const markers = page.locator('.maplibregl-marker').filter({ has: page.locator('svg') });
+  await expect(markers).toHaveCount(2);
+  expect(searches[0].searchParams.get('query')).toBe('gas station');
+  await markers.first().click();
+  const popup = page.locator('.maplibregl-popup-content');
+  await expect(popup).toContainText('Trạm xăng mới gần nhà');
+  await popup.getByRole('button', { name: 'Chi tiết', exact: true }).click();
+  await expect(page.locator('.place-detail-card').getByRole('heading', { name: 'Trạm xăng mới gần nhà', exact: true })).toBeVisible();
+  expect(details).toHaveLength(1);
+});
+
 test('write, edit and delete one community review without changing imported ratings', async ({ page }) => {
   const state = await setup(page);
   await page.goto('/map?placeId=cafe-1');

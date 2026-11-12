@@ -30,7 +30,7 @@ namespace MapAI.Infrastructure.Repositories
             if (string.IsNullOrEmpty(_apiKey))
             {
                 _logger.LogWarning("Foursquare API Key is not configured.");
-                return new List<FoursquareNearbyResult>();
+                throw new HttpRequestException("Nguồn Foursquare chưa được cấu hình.");
             }
 
             try
@@ -60,7 +60,7 @@ namespace MapAI.Infrastructure.Repositories
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogWarning("Foursquare API error: {StatusCode} {Reason}. Content: {Content}", response.StatusCode, response.ReasonPhrase, content);
-                    return new List<FoursquareNearbyResult>();
+                    response.EnsureSuccessStatusCode();
                 }
 
                 _logger.LogInformation("Foursquare RAW Response: {Content}", content); // Log data để kiểm tra
@@ -69,12 +69,13 @@ namespace MapAI.Infrastructure.Repositories
 
                 if (data?.Results == null)
                 {
-                    return new List<FoursquareNearbyResult>();
+                    throw new HttpRequestException("Foursquare không trả về danh sách địa điểm hợp lệ.");
                 }
 
                 return data.Results.Select(place => new FoursquareNearbyResult
                 {
                     FsqId = !string.IsNullOrEmpty(place.FsqId) ? place.FsqId : place.FsqPlaceId,
+                    Source = "foursquare",
                     Name = place.Name,
                     Location = place.Location,
                     Categories = place.Categories,
@@ -89,7 +90,7 @@ namespace MapAI.Infrastructure.Repositories
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error fetching nearby places from Foursquare at {Lat}, {Lng}", lat, lng);
-                return new List<FoursquareNearbyResult>();
+                throw new HttpRequestException("Nguồn Foursquare đang không khả dụng.", ex);
             }
         }
     }

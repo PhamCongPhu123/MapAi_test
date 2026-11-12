@@ -59,6 +59,20 @@ Trạng thái: `0 = đã duyệt`, `1 = chờ duyệt`, `2 = từ chối`. Page 
 
 `POST /contributions` nhận nội dung mô tả qua `description`, đường dẫn ảnh đã tải qua `thumbnail`. Đóng góp luôn ở trạng thái chờ duyệt, kể cả khi client gửi thêm `status=Approved`. Ảnh được hiển thị cho người gửi trong **Đóng góp của tôi** và cho admin trong hàng đợi duyệt. Dùng bucket Supabase `location` và cấu hình backend hiện có; không đưa service-role key vào frontend. Việc bổ sung ảnh không cần migration mới.
 
+## Địa điểm MapAI và lớp bản đồ nền
+
+OpenFreeMap cung cấp bản đồ nền từ dữ liệu OpenStreetMap. Đóng góp được lưu trong database MapAI, không tự ghi vào OpenStreetMap hoặc xuất bản lại tile OpenFreeMap.
+
+Sau khi admin duyệt, địa điểm được hiển thị qua lớp `mapai-places` và được gộp vào kết quả tìm kiếm:
+
+- Chat gần tôi dùng `/api/v1/map/places` hoặc `/api/v1/map/nearest`, gộp MapAI và OpenStreetMap theo bán kính.
+- Các nút danh mục (ví dụ **Trạm xăng**) dùng `/api/v1/map/city-wide`, gộp MapAI và OpenStreetMap trong vùng Đà Nẵng đang cấu hình; Foursquare là nguồn dự phòng.
+- `/api/v1/map/nearby` cũng gộp các nguồn theo bán kính được yêu cầu.
+
+`Cây xăng`, `Trạm xăng`, `gas station` và `fuel` cùng nhận diện danh mục `fuel`; Overpass tìm tag `amenity=fuel` thay vì chỉ tìm tên tiếng Anh. Địa điểm chờ duyệt, bị từ chối hoặc đã xóa không được công bố. Các bản ghi trùng tên trong 30 m được gộp, ưu tiên bản ghi MapAI để giữ đánh giá và chi tiết. Kết quả nút danh mục giữ `locationId`, giúp mở chi tiết bằng ID thay vì tra cứu lại theo tên.
+
+Chat và nút danh mục dùng phạm vi khác nhau (bán kính quanh người dùng và vùng Đà Nẵng), nên tổng số kết quả có thể khác nhau. Không cần migration database hoặc tải lại dữ liệu OpenFreeMap để công bố một đóng góp đã duyệt.
+
 ## Kiểm thử
 
 Frontend, từ `MapAI_FE-feature-map-api/`:
@@ -70,7 +84,14 @@ npx playwright install chromium
 npm run test:mobile:e2e
 ```
 
-Kiểm tra UI dùng API/bản đồ giả lập để kiểm tra gửi đóng góp, GPS/chọn ghim, trạng thái chờ duyệt, tìm kiếm, đánh giá và thao tác admin trên điện thoại/desktop.
+Kiểm tra UI dùng API/bản đồ giả lập để kiểm tra gửi đóng góp, GPS/chọn ghim, trạng thái chờ duyệt, tìm kiếm, đánh giá và thao tác admin trên điện thoại/desktop. Có kiểm tra nút **Trạm xăng** hiển thị cả địa điểm MapAI và nguồn ngoài, rồi mở đúng chi tiết bằng ID.
+
+Kiểm thử HTTP gộp nguồn, duyệt địa điểm và lọc phạm vi (mock nguồn ngoài, không cần khóa API):
+
+```bash
+cd MapAI_BE-main
+dotnet test tests/MapAI.Tests/MapAI.Tests.csproj
+```
 
 Kiểm tra HTTP backend thực, JWT thực và migrations trên PostgreSQL thực, từ `MapAI_BE-main/`:
 

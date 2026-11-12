@@ -5,6 +5,8 @@ namespace MapAI.Domain.Models.Foursquare
     public class FoursquareNearbyResult
     {
         public string FsqId { get; set; } = string.Empty;
+        public string? LocationId { get; set; }
+        public string Source { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public FoursquareLocation? Location { get; set; }
         public List<FoursquareCategory>? Categories { get; set; }

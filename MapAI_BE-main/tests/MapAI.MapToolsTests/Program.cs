@@ -24,7 +24,7 @@ async Task Throws<T>(Func<Task> action, string message) where T : Exception
 MapPlaceQuery Query(int limit = 10) => new() { Lat = 16.06, Lng = 108.22, Category = "fuel", Radius = 5000, Limit = limit };
 var osm = new FakeOsm();
 var locations = new FakeLocations();
-var service = new MapService(osm, locations, NullLogger<MapService>.Instance);
+var service = new MapService(osm, locations, NullLogger<MapService>.Instance, null!);
 locations.Items.AddRange(new[]
 {
     new LocationEntity { Id = "local", Title = "Local station", Category = "Cây xăng", Latitude = 16.0601, Longitude = 108.22 },
@@ -57,7 +57,7 @@ found = await service.FindPlacesAsync(Query());
 Check(found.Places.Count == 1 && found.Warnings.Count == 1, "Provider failure returns local results with a partial-data warning");
 locations.Fail = true;
 await Throws<HttpRequestException>(() => service.FindPlacesAsync(Query()), "Both sources unavailable is an error, not a false empty result");
-var controller = new MapController(service, null!, osm, NullLogger<MapController>.Instance);
+var controller = new MapController(service, NullLogger<MapController>.Instance);
 var unavailable = (ObjectResult)await controller.FindNearest(Query(), CancellationToken.None);
 Check(unavailable.StatusCode == 503, "MapController exposes source outage as 503");
 locations.Fail = false; osm.Fail = false;

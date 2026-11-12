@@ -1,6 +1,9 @@
 using MapAI.Common.Helpers;
 using MapAI.Domain.Entities;
 using MapAI.Domain.Enums;
+using MapAI.Domain.Models.Foursquare;
+using MapAI.Domain.Models.Osm;
+using MapAI.Application.Interfaces;
 using MapAI.Infrastructure.Interfaces;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -31,6 +34,10 @@ public sealed class MapAiFactory : WebApplicationFactory<Program>
     public byte[]? UploadedBytes { get; private set; }
     public bool FailEmail { get; set; }
     public bool FailUpload { get; set; }
+    public bool FailPlaces { get; set; }
+    public bool FailExternalPlaces { get; set; }
+    public List<FoursquareNearbyResult> ExternalPlaces { get; } = new();
+    public List<FoursquareNearbyResult> FoursquarePlaces { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -98,8 +105,26 @@ public sealed class MapAiFactory : WebApplicationFactory<Program>
             var locations = new Mock<ILocationRepository>();
             locations.Setup(x => x.AddAsync(It.IsAny<LocationEntity>())).ReturnsAsync((LocationEntity entity) => { Locations.Add(entity); return entity; });
             locations.Setup(x => x.GetAllAsync()).ReturnsAsync(() => Locations);
+            locations.Setup(x => x.GetByCoordinatesAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<double>()))
+                .ReturnsAsync(() => FailPlaces ? throw new IOException("Simulated database outage") : Locations);
             locations.Setup(x => x.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((string id) => Locations.FirstOrDefault(l => l.Id == id));
             Replace(services, locations.Object);
+
+            var osm = new Mock<IOsmRepository>();
+            osm.Setup(x => x.SearchCityWideOverpassAsync(It.IsAny<string>()))
+                .ReturnsAsync(() => FailExternalPlaces ? throw new HttpRequestException("Simulated OSM outage") : ExternalPlaces);
+            osm.Setup(x => x.SearchNearbyOverpassAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(() => FailExternalPlaces ? throw new HttpRequestException("Simulated OSM outage") : ExternalPlaces);
+            osm.Setup(x => x.SearchCategoryNearbyAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => FailExternalPlaces ? throw new HttpRequestException("Simulated OSM outage") : ExternalPlaces.Select(p => new MapPlaceResult
+                {
+                    Id = p.FsqId, Name = p.Name, Lat = p.Lat, Lng = p.Lng, Source = "openstreetmap", Category = "fuel"
+                }).ToList());
+            Replace(services, osm.Object);
+            var foursquare = new Mock<IFoursquareService>();
+            foursquare.Setup(x => x.GetNearbyPlacesAsync(It.IsAny<FoursquareSearchRequest>()))
+                .ReturnsAsync(() => FailExternalPlaces ? throw new HttpRequestException("Simulated Foursquare outage") : FoursquarePlaces);
+            Replace(services, foursquare.Object);
         });
     }
 

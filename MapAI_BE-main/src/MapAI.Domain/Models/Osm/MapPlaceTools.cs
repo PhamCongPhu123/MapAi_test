@@ -8,6 +8,14 @@ public record MapPlaceCategory(string Id, string Name, string[] Filters, string[
 
 public static class MapPlaceCategories
 {
+    // Category buttons also support groups which are not AI map-tool commands.
+    private static readonly MapPlaceCategory[] BrowseCategories =
+    [
+        new("bank_atm", "ATM/Ngân hàng", ["[\"amenity\"=\"atm\"]", "[\"amenity\"=\"bank\"]"], ["atm bank", "bank", "ngan hang"]),
+        new("bus", "Trạm xe bus", ["[\"amenity\"=\"bus_station\"]", "[\"highway\"=\"bus_stop\"]"], ["bus station", "bus stop", "bus_station", "bus_stop", "tram xe bus", "tram xe buyt"]),
+        new("tourism", "Tham quan", ["[\"tourism\"]", "[\"historic\"]"], ["attraction", "tourist attraction", "du lich", "landmark", "dia danh", "tham quan"])
+    ];
+
     // Filters are application constants; user/model text is never interpolated into Overpass QL.
     public static readonly IReadOnlyList<MapPlaceCategory> All = new[]
     {
@@ -35,6 +43,21 @@ public static class MapPlaceCategories
         var normalized = Normalize(query);
         return All.FirstOrDefault(category => category.Id == normalized || Normalize(category.Name) == normalized || category.Aliases.Contains(normalized));
     }
+
+    public static MapPlaceCategory? FindForBrowse(string? query)
+    {
+        if (Find(query) is { } category) return category;
+        if (string.IsNullOrWhiteSpace(query)) return null;
+        var normalized = Normalize(query);
+        return BrowseCategories.FirstOrDefault(c => c.Id == normalized || Normalize(c.Name) == normalized || c.Aliases.Contains(normalized));
+    }
+}
+
+public static class DaNangBounds
+{
+    public const double South = 15.91, West = 107.81, North = 16.25, East = 108.35;
+    public const string Overpass = "15.91,107.81,16.25,108.35";
+    public static bool Contains(double lat, double lng) => lat >= South && lat <= North && lng >= West && lng <= East;
 }
 
 public class MapPlaceQuery

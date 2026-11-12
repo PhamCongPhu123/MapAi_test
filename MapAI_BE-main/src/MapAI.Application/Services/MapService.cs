@@ -1,5 +1,7 @@
 using MapAI.Application.Interfaces;
 using MapAI.Domain.Models.Osm;
+using MapAI.Domain.Models.Foursquare;
+using MapAI.Domain.Entities;
 using MapAI.Infrastructure.Interfaces;
 using MapAI.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -11,12 +13,109 @@ namespace MapAI.Application.Services
         private readonly IOsmRepository _osmRepository;
         private readonly ILocationRepository _locations;
         private readonly ILogger<MapService> _logger;
+        private readonly IFoursquareService _foursquareService;
 
-        public MapService(IOsmRepository osmRepository, ILocationRepository locations, ILogger<MapService> logger)
+        public MapService(IOsmRepository osmRepository, ILocationRepository locations, ILogger<MapService> logger, IFoursquareService foursquareService)
         {
             _osmRepository = osmRepository;
             _locations = locations;
             _logger = logger;
+            _foursquareService = foursquareService;
+        }
+
+        public Task<List<FoursquareNearbyResult>> SearchNearbyPlacesAsync(double lat, double lng, string query, int radius)
+        {
+            if (!MapDistance.Valid(lat, lng) || radius is < 100 or > 20000)
+                throw new ArgumentException("Tọa độ hoặc bán kính không hợp lệ.");
+            return SearchBrowsePlacesAsync(lat, lng, query, radius, cityWide: false);
+        }
+
+        public Task<List<FoursquareNearbyResult>> SearchCityWidePlacesAsync(string query) =>
+            SearchBrowsePlacesAsync((DaNangBounds.South + DaNangBounds.North) / 2,
+                (DaNangBounds.West + DaNangBounds.East) / 2, query, 15000, cityWide: true);
+
+        private async Task<List<FoursquareNearbyResult>> SearchBrowsePlacesAsync(double lat, double lng, string query, int radius, bool cityWide)
+        {
+            if (query.Length > 100) throw new ArgumentException("Từ khóa tìm kiếm quá dài.");
+            var results = new List<FoursquareNearbyResult>();
+            var localAvailable = false;
+            var externalAvailable = false;
+            try
+            {
+                var epsilon = cityWide ? Math.Max(DaNangBounds.North - DaNangBounds.South, DaNangBounds.East - DaNangBounds.West) / 2
+                    : Math.Min(360, radius / (110000 * Math.Max(0.0001, Math.Cos(lat * Math.PI / 180))));
+                if (!cityWide && (lng - epsilon < -180 || lng + epsilon > 180)) epsilon = 360;
+                var local = await _locations.GetByCoordinatesAsync(lat, lng, epsilon);
+                results.AddRange(local.Where(p => p.Status == LocationStatus.Approved && !p.IsDeleted && MatchesBrowseQuery(p, query))
+                    .Select(p => new FoursquareNearbyResult
+                    {
+                        FsqId = $"mapai:{p.Id}", LocationId = p.Id, Source = "mapai", Type = "mapai_place",
+                        Name = p.Title, DisplayName = p.Address ?? "", Lat = p.Latitude, Lng = p.Longitude,
+                        Categories = [new() { Name = MapPlaceCategories.FindForBrowse(p.Category)?.Id ?? p.Category ?? "" }]
+                    }));
+                localAvailable = true;
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                _logger.LogWarning(error, "MapAI category search source unavailable");
+            }
+
+            var external = new List<FoursquareNearbyResult>();
+            try
+            {
+                external = cityWide ? await _osmRepository.SearchCityWideOverpassAsync(query)
+                    : await _osmRepository.SearchNearbyOverpassAsync(lat, lng, query, radius);
+                externalAvailable = true;
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                _logger.LogWarning(error, "OpenStreetMap category search source unavailable");
+            }
+            if (external.Count == 0)
+            {
+                try
+                {
+                    external = await _foursquareService.GetNearbyPlacesAsync(new()
+                    {
+                        Lat = cityWide ? 16.0544 : lat, Lng = cityWide ? 108.2022 : lng, Query = query, Radius = radius
+                    });
+                    externalAvailable = true;
+                }
+                catch (Exception error) when (error is not OperationCanceledException)
+                {
+                    _logger.LogWarning(error, "Foursquare category search source unavailable");
+                }
+            }
+            if (!localAvailable && !externalAvailable)
+                throw new HttpRequestException("Các nguồn địa điểm đang không khả dụng. Vui lòng thử lại sau.");
+
+            // Prefer the stored place when OSM/Foursquare also contains the same POI, so
+            // its details and reviews open by MapAI ID rather than by an ambiguous name.
+            var unique = new List<FoursquareNearbyResult>();
+            foreach (var place in results.Concat(external).Where(p => MapDistance.Valid(p.Lat, p.Lng)))
+            {
+                if (cityWide ? !DaNangBounds.Contains(place.Lat, place.Lng) : MapDistance.Meters(lat, lng, place.Lat, place.Lng) > radius) continue;
+                if (unique.Any(p => (!string.IsNullOrEmpty(place.FsqId) && p.FsqId == place.FsqId)
+                    || (MapPlaceCategories.Normalize(p.Name) == MapPlaceCategories.Normalize(place.Name)
+                        && MapDistance.Meters(p.Lat, p.Lng, place.Lat, place.Lng) <= 30))) continue;
+                unique.Add(place);
+            }
+            return unique;
+        }
+
+        private static bool MatchesBrowseQuery(LocationEntity place, string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return true;
+            var category = MapPlaceCategories.FindForBrowse(query);
+            if (category != null)
+            {
+                var stored = MapPlaceCategories.FindForBrowse(place.Category)?.Id;
+                return stored == category.Id || (category.Id == "bank_atm" && stored == "atm");
+            }
+            var text = MapPlaceCategories.Normalize(query);
+            return MapPlaceCategories.Normalize(place.Category ?? "").Contains(text)
+                || MapPlaceCategories.Normalize(place.Title).Contains(text)
+                || MapPlaceCategories.Normalize(place.Tags ?? "").Contains(text);
         }
 
         public async Task<List<NominatimResult>?> SearchLocationsAsync(string query)
