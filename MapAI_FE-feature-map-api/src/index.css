@@ -42,6 +42,7 @@ button, a, input, textarea {
 
 .map-search {
   top: calc(1.5rem + var(--safe-top));
+  width: calc(100% - 3rem);
   max-width: calc(100% - 3rem);
 }
 
@@ -85,6 +86,7 @@ button, a, input, textarea {
     top: calc(.75rem + var(--safe-top));
     left: max(.75rem, var(--safe-left));
     right: max(.75rem, var(--safe-right));
+    width: auto;
     max-width: none;
     gap: .75rem;
   }
@@ -197,7 +199,7 @@ button, a, input, textarea {
 @layer base {
   body {
     @apply bg-slate-950 text-slate-200 antialiased selection:bg-blue-500/30;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   }
 }
 
@@ -230,3 +232,14 @@ button, a, input, textarea {
     scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   }
 }
+
+/* Shared map overlays sit above both the map toolbar and the mobile chat. */
+.map-page > .offline-dialog-backdrop { position: fixed; z-index: 2100; color: #f8fafc; }
+.map-page .offline-dialog > header h2 { font-size: 18px; font-weight: 700; }
+.map-page .offline-dialog :focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+.map-page button:disabled { cursor: not-allowed; }
+
+.map-page .map-search .community-secondary { background: #020617e6; color: #f8fafc; border-color: #ffffff26; backdrop-filter: blur(16px); box-shadow: 0 4px 16px #0003; }
+.map-page .map-search .community-secondary:disabled { opacity: .5; }
+.map-page .map-search [data-testid="map-status"] { color: #6ee7b7; border-color: #10b98140; }
+.map-page[data-map-mode="offline"] .map-search [data-testid="map-status"] { color: #fcd34d; border-color: #f59e0b40; }

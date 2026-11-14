@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Star, MapPin, Phone, Globe, Clock, Image as ImageIcon, ExternalLink, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
+import { Heart, X, Star, MapPin, Phone, Globe, Clock, Image as ImageIcon, ExternalLink, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import LocationReviews from './Community/LocationReviews';
+import { offlineService } from '../offline/compositionRoot';
 
-const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
+const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online', favorite = false, onFavorite }) => {
+  const [localPhoto, setLocalPhoto] = useState(null);
+  useEffect(() => {
+    if (!place.image || !place.localId) return;
+    let alive = true, url;
+    offlineService.localAssetUrl(place.image).then(value => { url = value; if (alive) setLocalPhoto(value); }).catch(() => {});
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [place.image, place.localId]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   
-  const photos = place.photos?.length ? place.photos : place.thumbnail ? [place.thumbnail] : [];
+  const photos = place.localId ? (localPhoto ? [localPhoto] : []) : mode === 'offline' ? [] : place.photos?.length ? place.photos : place.thumbnail ? [place.thumbnail] : [];
 
   useEffect(() => {
     if (photos.length <= 1) return;
@@ -105,11 +113,13 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
 
           <button 
             onClick={onClose}
+            aria-label="Đóng chi tiết địa điểm"
             className="absolute top-10 right-6 p-2 bg-slate-900/40 hover:bg-red-500/40 backdrop-blur-md rounded-xl border border-white/10 text-white transition-all z-30 group/close"
           >
             <X size={18} className="group-hover/close:rotate-90 transition-transform" />
           </button>
 
+          {place.localId && <span className="absolute top-4 left-5 z-20 text-xs text-white bg-slate-950/80 rounded-lg px-2 py-1">Ảnh minh họa</span>}
           <div className="absolute bottom-6 left-8 right-8 z-20">
             <span className="px-3 py-1 rounded-md bg-blue-500/20 border border-blue-500/30 text-[8px] font-black uppercase tracking-[0.2em] text-blue-400 mb-2 inline-block">
               {place.type || 'Địa điểm'}
@@ -151,9 +161,12 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
               </div>
             </div>
 
-            <p className="text-xs text-slate-400">{place.isUserContribution ? 'Địa điểm do cộng đồng đóng góp, đã được quản trị viên duyệt.' : 'Địa điểm trong dữ liệu MapAI.'}</p>
+            <p className="text-xs text-slate-400">{place.localId ? 'Địa điểm trong gói Đà Nẵng đã tải.' : place.isUserContribution ? 'Địa điểm do cộng đồng đóng góp, đã được quản trị viên duyệt.' : 'Địa điểm trong dữ liệu MapAI.'}</p>
           </div>
-          {place.id && <LocationReviews key={place.id} locationId={place.id} />}
+          {place.localId && <div className="grid grid-cols-2 gap-3 text-xs text-slate-200"><p>Giờ tham khảo: {place.hours}</p><p>Khoảng giá: {place.price}</p></div>}
+          {place.localId && <p className="text-xs text-slate-400">Thông tin tham khảo từ gói Đà Nẵng, chưa xác nhận thay đổi thực tế.</p>}
+          {place.id && !place.localId && mode === 'online' && <LocationReviews key={place.id} locationId={place.id} />}
+          {mode === 'offline' && !place.localId && <p className="text-xs text-amber-200">Đánh giá cộng đồng cần kết nối mạng.</p>}
         </div>
 
         {/* Footer Actions */}
@@ -168,12 +181,16 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections }) => {
               <span>Dẫn đường</span>
               <ExternalLink size={14} />
             </motion.button>
-            <motion.button 
+            <motion.button
+              aria-label={place.localId ? favorite ? 'Bỏ lưu địa điểm' : 'Lưu yêu thích' : 'Thông tin liên hệ'}
+              aria-pressed={place.localId ? favorite : undefined}
+              onClick={() => place.localId && onFavorite?.(place.localId)}
+              disabled={!place.localId}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="flex-1 py-4 bg-white/5 border border-white/10 text-white rounded-xl flex items-center justify-center hover:bg-white/10 transition-all"
             >
-              <Phone size={16} />
+              {place.localId ? <Heart size={18} fill={favorite ? 'currentColor' : 'none'} /> : <Phone size={16} />}
             </motion.button>
           </div>
         </div>

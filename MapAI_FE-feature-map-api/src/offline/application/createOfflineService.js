@@ -3,7 +3,7 @@ export function createOfflineService({ repository, source, checksum, connectivit
   let installing, loadedGraph;
   async function getInstalledPackage() {
     const pkg = await repository.getPackage();
-    if (!pkg) return null;
+    if (!pkg || pkg.mapProvider !== 'openfreemap') return null;
     return await repository.isComplete(pkg) ? pkg : null;
   }
   function installPackage(onProgress = () => {}) {
@@ -11,8 +11,8 @@ export function createOfflineService({ repository, source, checksum, connectivit
     installing = (async () => {
       if (!source.embedded && connectivity.isOffline()) throw new Error('Hãy kết nối mạng và tắt giả lập để tải hoặc đồng bộ gói dữ liệu.');
       const manifest = await (await source.read('manifest.json')).json();
-      if (manifest.id !== 'danang' || !Array.isArray(manifest.assets) || !manifest.assets.length ||
-          !manifest.assets.every(a => /^[\w ./-]+$/.test(a.path) && !a.path.includes('..') && Number.isFinite(a.bytes))) throw new Error('Gói dữ liệu không hợp lệ.');
+      if (manifest.id !== 'danang' || manifest.mapProvider !== 'openfreemap' || !Array.isArray(manifest.assets) || !manifest.assets.length ||
+          !manifest.assets.every(a => /^[\w ./@-]+$/.test(a.path) && !a.path.includes('..') && Number.isFinite(a.bytes))) throw new Error('Gói dữ liệu không hợp lệ.');
       let completed = 0;
       const assets = [];
       for (const entry of manifest.assets) {
@@ -34,7 +34,7 @@ export function createOfflineService({ repository, source, checksum, connectivit
   }
   async function loadPackage() {
     const pkg = await getInstalledPackage();
-    if (!pkg) return null;
+    if (!pkg || pkg.mapProvider !== 'openfreemap') return null;
     const [places, roads, map, geography] = await Promise.all([repository.listPlaces(), repository.readAsset('roads.json'), repository.readAsset('danang.pmtiles'), repository.readAsset('geography.json')]);
     loadedGraph = JSON.parse(await roads.blob.text());
     return { pkg, places, mapBlob: map.blob, geography: JSON.parse(await geography.blob.text()) };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Navigation, ArrowLeftRight, X, Search, Loader2, ArrowLeft, MoreVertical, Flag, Car, Bike, Footprints, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Power, Clock, CornerUpRight, CornerUpLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LANDMARKS } from '../offline/application/constants';
 
 const DirectionsPanel = ({ 
   onBack, 
@@ -12,7 +13,11 @@ const DirectionsPanel = ({
   initialOrigin = null, 
   initialDestination = null, 
   routeInfo = null,
-  initialMode = 'driving'
+  initialMode = 'driving',
+  mapService,
+  mode = 'online',
+  onLocate,
+  onPickOrigin
 }) => {
   const [originQuery, setOriginQuery] = useState(initialOrigin?.name || '');
   const [destQuery, setDestQuery] = useState(initialDestination?.name || '');
@@ -25,8 +30,12 @@ const DirectionsPanel = ({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   const steps = routeInfo?.legs?.[0]?.steps || [];
+  const activeMode = mode === 'offline' ? (travelMode === 'motorbike' ? 'motorbike' : 'foot') : (travelMode === 'motorbike' ? 'driving' : travelMode);
 
-  const TRAVEL_MODES = [
+  const TRAVEL_MODES = mode === 'offline' ? [
+    { id: 'foot', icon: <Footprints size={18} />, label: 'Đi bộ' },
+    { id: 'motorbike', icon: <Bike size={18} />, label: 'Xe máy (ước tính)' },
+  ] : [
     { id: 'driving', icon: <Car size={18} />, label: 'Ô tô' },
     { id: 'bicycle', icon: <Bike size={18} />, label: 'Xe đạp' },
     { id: 'foot', icon: <Footprints size={18} />, label: 'Đi bộ' },
@@ -112,30 +121,28 @@ const DirectionsPanel = ({
     if (!origin || !destination) return;
 
     // So sánh để tránh gọi lại API khi tọa độ không thay đổi
-    const requestKey = `${origin.lng},${origin.lat}|${destination.lng},${destination.lat}|${travelMode}`;
+    const requestKey = `${origin.lng},${origin.lat}|${destination.lng},${destination.lat}|${activeMode}|${mode}`;
     if (lastRequestRef.current === requestKey) return;
 
     lastRequestRef.current = requestKey;
-    onRouteSelected(origin, destination, travelMode);
-  }, [origin, destination, travelMode, onRouteSelected]);
-
-  const searchLocation = async (text, type) => {
-    if (!text.trim() || text.length < 3) return;
-    setIsLoading(true);
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&limit=5`);
-      const data = await response.json();
-      setResults({ type, items: data });
-    } catch (error) { console.error(error); } finally { setIsLoading(false); }
-  };
+    onRouteSelected(origin, destination, activeMode);
+  }, [origin, destination, activeMode, mode, onRouteSelected]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (activeInput === 'origin') searchLocation(originQuery, 'origin');
-      else if (activeInput === 'dest') searchLocation(destQuery, 'dest');
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [originQuery, destQuery, activeInput]);
+    if (!activeInput || !mapService) return;
+    const controller = new AbortController();
+    const text = activeInput === 'origin' ? originQuery : destQuery;
+    const timer = setTimeout(async () => {
+      if (text.trim().length < 2) return;
+      setIsLoading(true);
+      try {
+        const places = await mapService.search(text, { signal: controller.signal });
+        if (!controller.signal.aborted) setResults({ type: activeInput, items: places.map(p => ({ ...p, display_name: p.name, lon: p.lng })) });
+      } catch { if (!controller.signal.aborted) setResults({ type: activeInput, items: [] }); }
+      finally { if (!controller.signal.aborted) setIsLoading(false); }
+    }, 400);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [originQuery, destQuery, activeInput, mapService, mode]);
 
   const formatDuration = (s) => {
     const m = Math.round(s / 60);
@@ -168,12 +175,12 @@ const DirectionsPanel = ({
             <div className="p-5 border-b border-white/10 bg-gradient-to-br from-blue-500/10 via-transparent to-rose-500/5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <button onClick={onBack} className="p-1.5 hover:bg-white/10 rounded-full text-white/70 transition-all border border-white/5"><ArrowLeft size={18} /></button>
+                  <button onClick={onBack} aria-label="Đóng bảng chỉ đường" className="p-1.5 hover:bg-white/10 rounded-full text-white/70 transition-all border border-white/5"><ArrowLeft size={18} /></button>
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/90">Lập lộ trình</h2>
                 </div>
                 <div className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
                   {TRAVEL_MODES.map(m => (
-                    <button key={m.id} aria-label={`Phương tiện: ${m.label}`} aria-pressed={travelMode === m.id} onClick={() => setTravelMode(m.id)} className={`p-2 rounded-lg transition-all ${travelMode === m.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-white/30 hover:text-white'}`}>{React.cloneElement(m.icon, { size: 14 })}</button>
+                    <button key={m.id} aria-label={`Phương tiện: ${m.label}`} aria-pressed={activeMode === m.id} onClick={() => setTravelMode(m.id)} className={`p-2 rounded-lg transition-all ${activeMode === m.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-white/30 hover:text-white'}`}>{React.cloneElement(m.icon, { size: 14 })}</button>
                   ))}
                 </div>
               </div>
@@ -202,6 +209,17 @@ const DirectionsPanel = ({
               </div>
             </div>
 
+            <div className="px-5 py-3 flex flex-wrap gap-2 border-b border-white/10" aria-label="Chọn điểm xuất phát">
+              <button className="community-secondary text-xs" onClick={async () => {
+                const point = await onLocate?.();
+                if (point) { setOrigin(point); setOriginQuery(point.name); setActiveInput(null); }
+              }}>Dùng GPS</button>
+              <button className="community-secondary text-xs" onClick={() => { setActiveInput(null); onPickOrigin?.(); }}>Chọn trên bản đồ</button>
+              {LANDMARKS.map(point => <button key={point.id} className="community-secondary text-xs" onClick={() => {
+                setOrigin(point); setOriginQuery(point.name); setActiveInput(null);
+              }}>{point.name}</button>)}
+            </div>
+            {routeInfo?.notice && <p className="px-5 py-3 text-xs text-amber-200" role="status">{routeInfo.notice}</p>}
             <div className="flex-1 overflow-y-auto custom-scrollbar relative min-h-[100px] bg-slate-900/30 transition-all">
               <AnimatePresence mode="wait">
                 {activeInput ? (
@@ -225,7 +243,7 @@ const DirectionsPanel = ({
                     ) : <div className="py-20 text-center opacity-20 flex flex-col items-center gap-4"><Search size={32} /><p className="text-[11px] font-black uppercase tracking-[0.2em]">Nhập địa chỉ để bắt đầu</p></div>}
                   </motion.div>
                 ) : origin && destination && routeInfo ? (
-                  <motion.div key="route-info" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-7 flex flex-col gap-6">
+                  <motion.div key="route-info" role="region" aria-label="Kết quả chỉ đường" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-7 flex flex-col gap-6">
                     <div className="flex flex-col gap-4">
                       <div className="p-6 bg-gradient-to-br from-blue-600/20 to-indigo-600/10 rounded-[2.5rem] border border-white/10 relative overflow-hidden group shadow-2xl">
                         <div className="absolute -right-4 -top-4 p-6 opacity-10 group-hover:scale-110 transition-transform rotate-12"><Navigation size={100} /></div>

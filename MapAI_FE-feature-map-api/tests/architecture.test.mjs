@@ -9,7 +9,7 @@ function files(dir, extension) {
     entry.isDirectory() ? files(path.join(dir, entry.name), extension) : entry.name.endsWith(extension) ? [path.join(dir, entry.name)] : []);
 }
 test('offline business layer has no React, persistence, platform or transport dependencies', () => {
-  for (const p of files(path.join(root, 'src/offline/application'), '.js')) {
+  for (const p of ['src/offline/application', 'src/map/application'].flatMap(dir => files(path.join(root, dir), '.js'))) {
     const s = fs.readFileSync(p, 'utf8');
     assert.doesNotMatch(s, /from\s+['"][^'"]*(?:infrastructure|presentation|compositionRoot|react|dexie|capacitor)/, p);
     assert.doesNotMatch(s, /\b(?:indexedDB|localStorage|navigator|window|fetch)\s*[.(]/, p);

@@ -116,7 +116,7 @@ export class RoutingEngine {
       const length = distanceMeters(asPoint(segment[0]), asPoint(segment[1]));
       const name = g.names[edgeNames[path[i]]];
       if (steps.at(-1)?.name === name) steps.at(-1).distance += length;
-      else steps.push({ name, distance: length, instruction: previousSegment ? `${turnLabel(previousSegment, segment)} ${name}` : `Đi theo ${name}` });
+      else steps.push({ name, location: segment[0], distance: length, instruction: previousSegment ? `${turnLabel(previousSegment, segment)} ${name}` : `Đi theo ${name}` });
       previousSegment = segment;
     }
     const accessDistance = start.distance + end.distance;

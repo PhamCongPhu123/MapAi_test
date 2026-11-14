@@ -39,6 +39,7 @@ test('home fits viewport; small screens expose bottom navigation', async ({ page
 
 test('email login calls existing API and returns to requested map', async ({ page }) => {
   await page.goto('/map?lat=16.0544&lng=108.2022');
+  await page.getByRole('button', { name: '+ Thêm địa điểm', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.getByPlaceholder('Email', { exact: true }).fill(user.email);
   await page.getByPlaceholder('Mật khẩu', { exact: true }).fill('test-only-password');
@@ -77,7 +78,7 @@ test('directions panel fits phone width and closes on Back', async ({ page }, te
   await page.goto('/map');
   await page.getByRole('button', { name: 'Chỉ đường', exact: true }).click();
   await expect(page.getByText('Lập lộ trình', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Để tôi tự nhập' }).click();
+  await expect(page.getByRole('button', { name: 'Cầu Rồng', exact: true })).toBeVisible();
   const panel = await page.locator('.directions-panel').boundingBox();
   expect(panel.x).toBeGreaterThanOrEqual(0);
   expect(panel.x + panel.width).toBeLessThanOrEqual(page.viewportSize().width);

@@ -8,10 +8,9 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Explore from './pages/Explore'
 import MapPage from './pages/MapPage'
-import OfflineMapPage from './pages/OfflineMapPage'
+import LegacyMapRedirect from './map/presentation/LegacyMapRedirect'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { canUseGoogleWebLogin } from './config/platform'
-import MapModeBoundary from './components/MapModeBoundary'
 import Profile from './pages/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
@@ -55,12 +54,10 @@ function App() {
         </Route>
       </Route>
 
-      {/* Local exploration is public; online accounts/admin keep their existing guards. */}
-      <Route path="/offline" element={<OfflineMapPage />} />
-      <Route element={<MapModeBoundary />}>
-        <Route path="/map" element={<MapPage />} />
-        <Route path="/map/online" element={<MapPage />} />
-      </Route>
+      {/* One public map workspace; account/admin writes retain API authorization. */}
+      <Route path="/map" element={<MapPage />} />
+      <Route path="/offline" element={<LegacyMapRedirect />} />
+      <Route path="/map/online" element={<LegacyMapRedirect />} />
 
       {/* Admin Routes */}
       <Route element={<ProtectedRoute requiredRole="Admin" />}>

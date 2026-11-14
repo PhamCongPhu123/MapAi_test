@@ -11,7 +11,7 @@ export default function NativeAppBridge() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const startOfflineDemo = useEffectEvent(() => {
-    if (window.location.pathname === '/' && import.meta.env.VITE_START_OFFLINE === 'true') navigate('/offline', { replace: true });
+    if (window.location.pathname === '/' && import.meta.env.VITE_START_OFFLINE === 'true') navigate('/map', { replace: true });
   });
 
   const handleAuthLink = useEffectEvent(({ url }) => {

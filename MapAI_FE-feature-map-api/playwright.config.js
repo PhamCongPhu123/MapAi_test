@@ -5,6 +5,8 @@ export default defineConfig({
   testIgnore: ['**/offline.spec.js', '**/appearance.spec.js', '**/gps-and-sheet.spec.js', '**/package-integrity.spec.js', '**/unified.spec.js', '**/native-offline.spec.js'],
   fullyParallel: true,
   workers: 2,
+  timeout: 45000,
+  expect: { timeout: 12000 },
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:4174',
@@ -18,7 +20,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1 --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174',
-    env: { VITE_API_BASE_URL: 'http://127.0.0.1:5028/api/v1', VITE_MAPTILER_KEY: process.env.MAPAI_TEST_MAPTILER_KEY || '' },
+    env: { VITE_API_BASE_URL: 'http://127.0.0.1:5028/api/v1' },
     reuseExistingServer: false,
   },
 });

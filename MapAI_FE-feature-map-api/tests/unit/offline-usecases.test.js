@@ -5,7 +5,7 @@ import { createOfflineService } from '../../src/offline/application/createOfflin
 
 function fixture({ embedded = false, offline = true, corrupt = false } = {}) {
   const contents = { 'places.json': JSON.stringify([{ id: 'bridge' }]), 'roads.json': JSON.stringify({ nodes: [[108, 16]], edges: [[0, 0]] }), 'danang.pmtiles': 'map', 'geography.json': '{}' };
-  const manifest = { id: 'danang', assets: Object.entries(contents).map(([path, content]) => ({ path, bytes: Buffer.byteLength(content), sha256: createHash('sha256').update(content).digest('hex') })) };
+  const manifest = { id: 'danang', mapProvider: 'openfreemap', assets: Object.entries(contents).map(([path, content]) => ({ path, bytes: Buffer.byteLength(content), sha256: createHash('sha256').update(content).digest('hex') })) };
   manifest.bytes = manifest.assets.reduce((n, a) => n + a.bytes, 0);
   let commits = 0, pkg = { version: 'old' };
   const repository = { async replacePackage(next) { commits++; pkg = next; }, getPackage: async () => pkg, isComplete: async () => true };

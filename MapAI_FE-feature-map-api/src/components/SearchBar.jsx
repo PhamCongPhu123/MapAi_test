@@ -3,17 +3,16 @@ import { Search, MapPin, X, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast';
-import { searchLocations } from '../services/mapServices';
-import { communityApi } from '../services/communityService';
-
-const SearchBar = () => {
+const SearchBar = ({ service, mode = 'online', onSelect }) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
+  const [resultData, setResultData] = useState({ mode, items: [] });
+  const results = resultData.mode === mode ? resultData.items : [];
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const navigate = useNavigate();
   const { addToast } = useToast();
   const searchRef = useRef(null);
+  const chosenQuery = useRef('');
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -25,43 +24,40 @@ const SearchBar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const searchLocation = useCallback(async (text) => {
+  const searchLocation = useCallback(async (text, signal) => {
     if (!text.trim() || text.length < 2) { // Giảm xuống 2 ký tự để nhạy hơn
-      setResults([]);
+      setResultData({ mode, items: [] });
       return;
     }
 
     setIsLoading(true);
     try {
-      const [local, external] = await Promise.allSettled([communityApi.search(text), searchLocations(text)]);
-      if (local.status === 'rejected' && external.status === 'rejected') throw local.reason;
-      const localPlaces = local.status === 'fulfilled' ? local.value.map(place => ({
-        id: place.id, display_name: place.title, lat: place.latitude, lon: place.longitude,
-        type: 'MapAI', address: { city: place.address || 'Đà Nẵng' },
-      })) : [];
-      const externalPlaces = external.status === 'fulfilled' ? external.value : [];
-      setResults([...localPlaces, ...externalPlaces]);
+      const items = await service.search(text, { signal });
+      if (signal.aborted) return;
+      setResultData({ mode, items });
       setShowResults(true);
     } catch (_error) {
-      console.error('Search error:', _error);
-      addToast("Không thể tìm kiếm địa điểm này", "error");
+      if (!signal.aborted) addToast("Không thể tìm kiếm địa điểm này", "error");
     } finally {
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, mode, service]);
 
   useEffect(() => {
+    const controller = new AbortController();
     const timer = setTimeout(() => {
-      if (query) searchLocation(query);
-    }, 1000);
-    return () => clearTimeout(timer);
+      if (query && chosenQuery.current !== query) searchLocation(query, controller.signal);
+    }, 400);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [query, searchLocation]);
 
   const handleSelect = (result) => {
     const lat = result.lat;
-    const lon = result.lon;
-    setQuery(result.display_name);
+    const lon = result.lng;
+    chosenQuery.current = result.name;
+    setQuery(result.name);
     setShowResults(false);
+    onSelect?.(result);
     
     // Đẩy lên URL dưới dạng map?lat=?&lng=?
     navigate(`/map?${result.id ? `placeId=${encodeURIComponent(result.id)}&` : ""}lat=${lat}&lng=${lon}`);
@@ -76,14 +72,16 @@ const SearchBar = () => {
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { chosenQuery.current = ''; setQuery(e.target.value); }}
           onFocus={() => query.length >= 3 && setShowResults(true)}
           placeholder="Tìm địa điểm, địa chỉ..."
+          aria-label="Tìm địa điểm, địa chỉ"
           className="w-full bg-slate-950/40 backdrop-blur-2xl border border-white/10 rounded-xl py-3 pl-11 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all text-[13px] text-white placeholder:text-white/30 shadow-lg hover:bg-slate-950/60"
         />
         {query && (
           <button 
-            onClick={() => { setQuery(''); setResults([]); }}
+            aria-label="Xóa từ khóa"
+            onClick={() => { setQuery(''); setResultData({ mode, items: [] }); setIsLoading(false); }}
             className="absolute right-4 text-white/40 hover:text-white transition-colors"
           >
             <X size={14} />
@@ -92,7 +90,7 @@ const SearchBar = () => {
       </div>
 
       <AnimatePresence>
-        {showResults && results.length > 0 && (
+        {showResults && query.length >= 2 && !isLoading && (
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -100,6 +98,7 @@ const SearchBar = () => {
             className="absolute top-full mt-2 w-full bg-slate-950/90 backdrop-blur-3xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-50"
           >
             <div className="max-h-[300px] overflow-y-auto no-scrollbar py-1">
+              {!results.length && <p role="status" className="px-4 py-4 text-sm text-slate-300">{mode === 'offline' ? 'Chưa có kết quả trong gói Đà Nẵng. Thử từ khóa khác.' : 'Chưa tìm thấy địa điểm phù hợp.'}</p>}
               {results.map((result, idx) => (
                 <button
                   key={idx}
@@ -110,9 +109,9 @@ const SearchBar = () => {
                     <MapPin size={14} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[12px] font-bold text-white truncate group-hover/item:text-blue-400 transition-colors">{result.display_name}</p>
+                    <p className="text-[12px] font-bold text-white truncate group-hover/item:text-blue-400 transition-colors">{result.name}</p>
                     <p className="text-[9px] text-slate-500 mt-0.5 truncate uppercase tracking-tight font-medium">
-                      {(result.type || 'place').replace('_', ' ')} • {result.address?.suburb || result.address?.city || 'Đà Nẵng'}
+                      {(result.type || 'place').replace('_', ' ')} • {result.address || 'Đà Nẵng'}
                     </p>
                   </div>
                 </button>

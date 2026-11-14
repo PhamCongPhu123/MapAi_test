@@ -1,19 +1,19 @@
-import React, { useEffect, useRef, useState, useCallback, useImperativeHandle } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, useLayoutEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 
 // Import Services & Helpers
-import { searchLocation } from '../services/locationService';
-import { fetchRoute } from '../services/mapServices';
 import { getDeviceLocation, locationErrorMessage } from '../services/deviceLocation';
-import { communityApi, toMapPlace } from '../services/communityService';
 import ContributionDialog from './Community/ContributionDialog';
 import { MapPin } from 'lucide-react';
 import { createPlacePopup } from '../utils/mapPopup';
 import { toLngLat, placesGeoJSON } from '../utils/mapCoordinates';
-import { basemapStyle, basemapProviders, mapTilerKey, monitorBasemap } from '../services/mapBasemap';
+import { basemapProviders, monitorBasemap } from '../services/mapBasemap';
+import { bindOpenFreeMapPackage, openFreeMapStyle } from '../map/infrastructure/openFreeMapRuntime';
+import { offlineService } from '../offline/compositionRoot';
+import { useAuth } from '../hooks/useAuth';
 
 // Import Components
 import PlaceDetailPanel from './PlaceDetailPanel';
@@ -51,7 +51,19 @@ function BasemapSelector({ value, providers, onSelect }) {
   </label>;
 }
 
-const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigating, setIsNavigating, onLocationFound }) => {
+const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigating, setIsNavigating, onLocationFound, mapService, mode, localData, personal }) => {
+  const { user } = useAuth();
+  const session = useRef({ mode, localData });
+  useLayoutEffect(() => { session.current = { mode, localData }; }, [mode, localData]);
+  const offlineBinding = useRef(null);
+  const appliedStyle = useRef(null);
+  const styleReady = useRef(false);
+  const detailRequest = useRef(0);
+  const routeRequest = useRef(0);
+  const openedQuery = useRef(null);
+  const cameraQuery = useRef(null);
+  const originPicking = useRef(false);
+  const [isPickingOrigin, setIsPickingOrigin] = useState(false);
   const [searchParams] = useSearchParams();
   const mapContainer = useRef(null);
   const map = useRef(null);
@@ -59,6 +71,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
   // States
   const [is3D, setIs3D] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [basemapReady, setBasemapReady] = useState(false);
   const [bearing, setBearing] = useState(0);
   const [mapError, setMapError] = useState(null);
   const [mapWarning, setMapWarning] = useState(null);
@@ -67,7 +80,8 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
   const [styleRevision, setStyleRevision] = useState(0);
   const basemap = useRef(null);
   const [selectedPlace, setSelectedPlace] = useState(null);
-  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailPending, setDetailPending] = useState(null);
+  const isDetailLoading = detailPending?.mode === mode;
   const [isUserLocating, setIsUserLocating] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const locatingRef = useRef(false);
@@ -185,9 +199,6 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     if (forceMode !== null && nextIs3D === is3D) return false;
 
     if (nextIs3D) {
-      if (map.current.getSource('maptiler-terrain')) {
-        map.current.setTerrain({ source: 'maptiler-terrain', exaggeration: 1.5 });
-      }
       map.current.easeTo({ pitch: 65, zoom: Math.max(map.current.getZoom(), 15.5), duration: 1000 });
     } else {
       map.current.setTerrain(null);
@@ -296,9 +307,6 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     brng = (brng + 360) % 360;
 
     if (!is3D) {
-      if (map.current.getSource('maptiler-terrain')) {
-        map.current.setTerrain({ source: 'maptiler-terrain', exaggeration: 1.5 });
-      }
       setIs3D(true);
     }
 
@@ -307,12 +315,15 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
   }, [routeInfo, is3D, addToast, setIsNavigating]);
 
   const clearRoute = useCallback(() => {
+    routeRequest.current++;
     if (!map.current) return;
     if (map.current.getLayer('route-line')) map.current.removeLayer('route-line');
     if (map.current.getSource('route')) map.current.removeSource('route');
     routeMarkersRef.current.forEach(m => m.remove());
     routeMarkersRef.current = [];
     setRouteInfo(null);
+    if (map.current.getLayer('route-access-line')) map.current.removeLayer('route-access-line');
+    if (map.current.getSource('route-access')) map.current.removeSource('route-access');
   }, []);
 
   // Expose methods to parent
@@ -366,9 +377,12 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       setIsNavigating(false);
       setIsDirectionsMode(true);
     },
+    showPlace: place => { openedQuery.current = place.id || null; return openPlace(place); },
+    startDirections: place => handleStartDirectionsFromPanel(place),
     dismissDetails: () => { setSelectedPlace(null); setShowLocationPopup(false); },
     startContribution: () => {
       if (pickingRef.current) return;
+      if (mode === 'offline' || !user) { addToast(mode === 'offline' ? 'Gửi đóng góp cần kết nối mạng.' : 'Hãy đăng nhập để gửi địa điểm.', 'info'); return; }
       const center = map.current?.getCenter() || { lat: 16.06, lng: 108.22 };
       setSelectedPlace(null);
       setContributionDraft({ title: '', coordinates: { latitude: center.lat.toFixed(6), longitude: center.lng.toFixed(6) } });
@@ -380,7 +394,9 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
     const coordinates = toLngLat({ lat, lng });
-    if (coordinates && map.current) {
+    const key = `${lat},${lng}`;
+    if (coordinates && map.current && cameraQuery.current !== key) {
+      cameraQuery.current = key;
       const [lonNum, latNum] = coordinates;
       clearNearbyMarkers();
       map.current.flyTo({ center: [lonNum, latNum], zoom: 16, essential: true, duration: 3000 });
@@ -447,7 +463,9 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
   useEffect(() => {
     const onBack = event => {
       if (event.defaultPrevented) return;
-      if (isPickingLocation) {
+      if (isPickingOrigin) {
+        event.preventDefault(); originPicking.current = false; setIsPickingOrigin(false); setIsDirectionsMode(true);
+      } else if (isPickingLocation) {
         event.preventDefault();
         pickingRef.current = false;
         setIsPickingLocation(false);
@@ -464,101 +482,117 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     };
     window.addEventListener('mapai:back', onBack, true);
     return () => window.removeEventListener('mapai:back', onBack, true);
-  }, [selectedPlace, showLocationPopup, contributionDraft, isPickingLocation]);
+  }, [selectedPlace, showLocationPopup, contributionDraft, isPickingLocation, isPickingOrigin, setIsDirectionsMode]);
 
-  const MAPTILER_KEY = mapTilerKey(import.meta.env.VITE_MAPTILER_KEY);
+  const applyBasemap = useCallback((data, offline) => {
+    const currentMap = map.current;
+    if (!currentMap) return;
+    const key = `${offline}:${offline ? data?.pkg.installedAt || 'missing' : ''}`;
+    if (appliedStyle.current === key) return;
+    appliedStyle.current = key;
+    const previous = offlineBinding.current;
+    previous?.dispose();
+    const binding = offline ? bindOpenFreeMapPackage(data) : null;
+    offlineBinding.current = binding;
+    styleReady.current = false;
+    setBasemapReady(false);
+    setIsLoaded(false);
+    currentMap.setMaxBounds(offline && data ? [[data.pkg.bounds[0], data.pkg.bounds[1]], [data.pkg.bounds[2], data.pkg.bounds[3]]] : undefined);
+    currentMap.setMinZoom(offline ? 9 : 0);
+    currentMap.setStyle(offline && !binding ? { version: 8, sources: {}, layers: [
+      { id: 'waiting-for-package', type: 'background', paint: { 'background-color': '#020617' } },
+    ] } : openFreeMapStyle(binding), { diff: false });
+    if (offline && !binding) setMapWarning('Chưa có gói OpenFreeMap Đà Nẵng. Mở quản lý dữ liệu để cài gói.');
+    else setMapWarning(null);
+  }, []);
 
   useEffect(() => {
     if (map.current) return;
     try {
-      map.current = new maplibregl.Map({
+      const currentMap = new maplibregl.Map({
         container: mapContainer.current,
-        style: basemapStyle(MAPTILER_KEY),
-        center: [108.22, 16.06],
-        zoom: 15,
-        pitch: 0,
-        antialias: true
+        style: { version: 8, sources: {}, layers: [] },
+        center: [108.22, 16.06], zoom: 15, pitch: 0, antialias: true,
       });
-
-      const currentMap = map.current;
-      basemap.current = monitorBasemap(currentMap, MAPTILER_KEY, {
-        onChanging: () => setIsLoaded(false),
-        onWarning: setMapWarning,
-        onProviderChange: setMapProvider,
-        onReady: ({ provider }) => {
-          if (provider === 'maptiler' && MAPTILER_KEY && !currentMap.getSource('maptiler-terrain')) {
-            currentMap.addSource('maptiler-terrain', { type: 'raster-dem', url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${encodeURIComponent(MAPTILER_KEY)}`, tileSize: 256 });
-          }
-          setIsLoaded(true);
-          setStyleRevision(revision => revision + 1);
-          currentMap.resize();
-        },
+      map.current = currentMap;
+      basemap.current = monitorBasemap(currentMap, null, {
+        onChanging: () => setIsLoaded(false), onWarning: setMapWarning, onProviderChange: setMapProvider,
+        onReload: () => { appliedStyle.current = null; applyBasemap(session.current.localData, session.current.mode === 'offline'); },
+        onReady: () => { styleReady.current = true; setIsLoaded(true); setStyleRevision(n => n + 1); currentMap.resize(); },
       });
-
-      map.current.on('rotate', () => setBearing(map.current.getBearing()));
-      map.current.on('click', (e) => {
+      currentMap.on('idle', () => { if (currentMap.getSource('openmaptiles') && currentMap.isSourceLoaded('openmaptiles')) setBasemapReady(true); });
+      currentMap.on('rotate', () => setBearing(currentMap.getBearing()));
+      currentMap.on('click', e => {
+        if (originPicking.current) {
+          originPicking.current = false; setIsPickingOrigin(false);
+          setInitialOrigin({ name: 'Điểm đã chọn trên bản đồ', lng: e.lngLat.lng, lat: e.lngLat.lat });
+          setIsDirectionsMode(true); return;
+        }
         if (pickingRef.current) return;
-        const features = map.current.queryRenderedFeatures([ [e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10] ]);
+        if (e.originalEvent.target?.closest?.('.maplibregl-marker, .maplibregl-popup')) return;
+        const features = currentMap.queryRenderedFeatures([[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]]);
+        if (features.some(feature => feature.source === 'mapai-places')) return;
         const poi = features.find(f => f.properties?.name && f.geometry?.type === 'Point') || features.find(f => f.properties?.name);
         if (!poi) return;
         const [lng, lat] = poi.geometry.type === 'Point' ? poi.geometry.coordinates : [e.lngLat.lng, e.lngLat.lat];
         const place = { name: poi.properties.name, lng, lat };
-        const popupContent = createPlacePopup(place,
+        const content = createPlacePopup(place,
           () => window.showPlaceDetails?.(place.name, lng, lat),
           () => window.startDirectionsFromPopup?.(place.name, lng, lat));
-        new maplibregl.Popup({ offset: [0, -10], closeButton: true }).setLngLat([lng, lat]).setDOMContent(popupContent).addTo(map.current);
+        new maplibregl.Popup({ offset: [0, -10], closeButton: true }).setLngLat([lng, lat]).setDOMContent(content).addTo(currentMap);
       });
-    } catch (_err) { setMapError("Không thể khởi tạo bản đồ."); }
+    } catch { setMapError('Không thể khởi tạo bản đồ OpenFreeMap.'); }
     return () => {
-      basemap.current?.dispose();
-      basemap.current = null;
-      if (map.current) { map.current.remove(); map.current = null; }
+      basemap.current?.dispose(); basemap.current = null;
+      offlineBinding.current?.dispose(); offlineBinding.current = null; appliedStyle.current = null;
+      map.current?.remove(); map.current = null;
     };
-  }, [MAPTILER_KEY]);
-
-  const handleShowDetails = useCallback(async (name, coordinates) => {
-    setIsDetailLoading(true);
-    try {
-      const details = await searchLocation(name, coordinates);
-      if (details) {
-        setSelectedPlace(details);
-      } else {
-        setSelectedPlace(null);
-        setContributionDraft({ title: name, coordinates: { latitude: coordinates[1], longitude: coordinates[0] } });
-        addToast("Địa điểm chưa có trong MapAI. Bạn có thể gửi thông tin để quản trị viên duyệt.", "info");
-      }
-    } catch (_error) { 
-      addToast("Không thể tải thông tin từ hệ thống.", "error"); 
-    } finally { 
-      setIsDetailLoading(false); 
-    }
-  }, [addToast]);
-
-  const openStoredPlace = useCallback(async (id, signal) => {
-    try {
-      const place = toMapPlace(await communityApi.get(id, signal));
-      if (signal?.aborted) return;
-      if (!toLngLat(place)) throw new Error('Tọa độ địa điểm không hợp lệ.');
-      setSelectedPlace(place);
-      map.current?.flyTo({ center: [place.lng, place.lat], zoom: 17 });
-    } catch (error) { if (!signal?.aborted) addToast(error.message, 'error'); }
-  }, [addToast]);
+  }, [applyBasemap, setIsDirectionsMode]);
 
   useEffect(() => {
-    if (!isLoaded || !map.current) return;
+    applyBasemap(localData, mode === 'offline');
+  }, [mode, localData, applyBasemap]);
+
+  const openPlace = useCallback(async (place, signal) => {
+    const requestId = ++detailRequest.current;
+    const requestMode = mapService.mode();
+    setDetailPending({ id: requestId, mode: requestMode });
+    try {
+      const details = await mapService.details(place, signal);
+      if (signal?.aborted || requestId !== detailRequest.current || requestMode !== mapService.mode()) return;
+      if (details) {
+        setSelectedPlace(details);
+        if (details.localId) offlineService.recordVisit(details.localId).catch(() => {});
+        return details;
+      } else if (requestMode === 'online' && user) {
+        setContributionDraft({ title: place.name, coordinates: { latitude: place.lat, longitude: place.lng } });
+        addToast('Địa điểm chưa có trong MapAI. Bạn có thể gửi thông tin để duyệt.', 'info');
+      }
+    } catch (error) { if (!signal?.aborted && requestId === detailRequest.current && requestMode === mapService.mode()) addToast(error.message, 'error'); }
+    finally { setDetailPending(current => current?.id === requestId ? null : current); }
+  }, [mapService, addToast, user]);
+
+  const handleShowDetails = useCallback((name, coordinates) => openPlace({ name, lng: coordinates[0], lat: coordinates[1] }), [openPlace]);
+  const openStoredPlace = useCallback(async (id, signal) => {
+    return openPlace({ id }, signal);
+  }, [openPlace]);
+
+  useEffect(() => {
+    if (!isLoaded || !map.current || !styleReady.current) return;
     const currentMap = map.current;
     const controller = new AbortController();
     let disposed = false;
     const sourceId = 'mapai-places';
     const layerId = 'mapai-places-points';
+    if (currentMap.getSource(sourceId)) return;
     currentMap.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     currentMap.addLayer({ id: layerId, type: 'circle', source: sourceId,
       paint: { 'circle-radius': 9, 'circle-color': '#8b5cf6', 'circle-stroke-width': 3, 'circle-stroke-color': '#fff' } });
     const refresh = async () => {
       try {
-        const places = await communityApi.list(controller.signal);
+        const places = await mapService.list(controller.signal);
         if (disposed) return;
-        currentMap.getSource(sourceId)?.setData(placesGeoJSON(places));
+        currentMap.getSource(sourceId)?.setData(placesGeoJSON(places.map(place => ({ ...place, title: place.name }))));
       } catch (error) { if (!controller.signal.aborted) addToast(`Không thể tải địa điểm MapAI: ${error.message}`, 'error'); }
     };
     const onClick = event => {
@@ -580,20 +614,26 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
         if (currentMap.getSource(sourceId)) currentMap.removeSource(sourceId);
       }
     };
-  }, [isLoaded, styleRevision, addToast, openStoredPlace]);
+  }, [isLoaded, styleRevision, addToast, openStoredPlace, mapService, mode, localData]);
 
   useEffect(() => {
     const currentMap = map.current;
-    if (!isLoaded || !routeInfo?.geometry || !currentMap || currentMap.getSource('route')) return;
+    if (!isLoaded || !routeInfo?.geometry || !currentMap || !styleReady.current || currentMap.getSource('route')) return;
     currentMap.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: routeInfo.geometry } });
     currentMap.addLayer({ id: 'route-line', type: 'line', source: 'route', paint: { 'line-color': '#3b82f6', 'line-width': 6 } });
+    if (routeInfo.access) {
+      currentMap.addSource('route-access', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'MultiLineString', coordinates: routeInfo.access } } });
+      currentMap.addLayer({ id: 'route-access-line', type: 'line', source: 'route-access', paint: { 'line-color': '#2563eb', 'line-width': 3, 'line-dasharray': [2, 2] } });
+    }
   }, [isLoaded, styleRevision, routeInfo]);
 
   useEffect(() => {
     const id = searchParams.get('placeId');
-    if (!id || !isLoaded) return;
+    if (!id || !isLoaded || openedQuery.current === id) return;
     const controller = new AbortController();
-    openStoredPlace(id, controller.signal);
+    openStoredPlace(id, controller.signal).then(details => {
+      if (details && !controller.signal.aborted) openedQuery.current = id;
+    });
     return () => controller.abort();
   }, [searchParams, isLoaded, openStoredPlace]);
 
@@ -611,7 +651,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     setSelectedPlace(null); // Đóng panel chi tiết
   }, [setIsDirectionsMode]);
 
-  const handleRouteSelected = useCallback(async (origin, destination, mode = 'driving') => {
+  const handleRouteSelected = useCallback(async (origin, destination, travelMode = 'driving') => {
     if (!map.current) return;
     clearRoute();
     if (searchMarkerRef.current) {
@@ -619,17 +659,18 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       searchMarkerRef.current = null;
     }
 
+    const requestId = ++routeRequest.current;
+    const requestMode = mapService.mode();
+    setInitialOrigin(origin); setInitialDestination(destination);
     const loadingToastId = addToast(`Đang tìm đường...`, "loading", Infinity);
     try {
-      const key = `${origin.lng},${origin.lat}|${destination.lng},${destination.lat}|${mode}`;
-      const route = preparedRoute.current?.key === key && preparedRoute.current.route
-        ? preparedRoute.current.route : await fetchRoute(origin, destination, mode);
+      const key = `${origin.lng},${origin.lat}|${destination.lng},${destination.lat}|${travelMode}`;
+      const route = requestMode === 'online' && preparedRoute.current?.key === key && preparedRoute.current.route
+        ? preparedRoute.current.route : await mapService.route(origin, destination, travelMode);
+      if (requestId !== routeRequest.current || requestMode !== mapService.mode()) { removeToast(loadingToastId); return; }
       preparedRoute.current = null;
       if (route?.geometry?.type !== 'LineString' || !Array.isArray(route.geometry.coordinates) || route.geometry.coordinates.length < 2)
         throw new Error('Tuyến đường trả về không hợp lệ.');
-      map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: route.geometry } });
-      map.current.addLayer({ id: 'route-line', type: 'line', source: 'route', paint: { 'line-color': '#3b82f6', 'line-width': 6 } });
-
       const originEl = document.createElement('div');
       originEl.className = 'flex items-center justify-center';
       originEl.innerHTML = `<div class="relative flex items-center justify-center"><div class="absolute w-8 h-8 bg-blue-500/30 rounded-full animate-ping"></div><div class="w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center"><div class="w-1.5 h-1.5 bg-white rounded-full"></div></div></div>`;
@@ -654,9 +695,9 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     } catch (_error) { 
       console.error("Route error:", _error);
       removeToast(loadingToastId); 
-      addToast("Lỗi tìm đường", "error"); 
+      if (requestId === routeRequest.current && requestMode === mapService.mode()) addToast(_error.message || 'Lỗi tìm đường', 'error');
     }
-  }, [addToast, removeToast, clearRoute]);
+  }, [addToast, removeToast, clearRoute, mapService]);
 
   useEffect(() => {
     window.showPlaceDetails = (name, lng, lat, id) => id ? openStoredPlace(id) : handleShowDetails(name, [lng, lat]);
@@ -686,19 +727,20 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       const savedLoc = sessionStorage.getItem('user_location');
       if (savedLoc) {
         setInitialOrigin(JSON.parse(savedLoc));
-      } else if (!isUserLocating) {
-        setShowLocationPopup(true);
       }
     }
   }, [isDirectionsMode, initialOrigin, isNavigating, isUserLocating]);
 
   return (
-    <div className="relative w-full h-full bg-[#0f172a] overflow-hidden">
+    <div role="region" aria-label="Bản đồ OpenFreeMap" aria-busy={!basemapReady} className="relative w-full h-full bg-[#0f172a] overflow-hidden">
       <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
       <AnimatePresence>
         {isDirectionsMode && (
           <DirectionsPanel 
             key={directionSession}
+            mapService={mapService} mode={mode}
+            onLocate={() => handleLocateUser(true)}
+            onPickOrigin={() => { originPicking.current = true; setIsPickingOrigin(true); setIsDirectionsMode(false); }}
             initialMode={initialTravelMode}
             initialOrigin={initialOrigin} initialDestination={initialDestination} routeInfo={routeInfo}
             isNavigating={isNavigating}
@@ -714,7 +756,10 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       <AnimatePresence>
         {selectedPlace && (
           <PlaceDetailPanel 
-            place={selectedPlace} 
+            key={selectedPlace.id || selectedPlace.name}
+            place={selectedPlace} mode={mode}
+            favorite={personal?.favorites.has(selectedPlace.localId)}
+            onFavorite={id => offlineService.toggleFavorite(id).catch(error => addToast(error.message, 'error'))}
             onClose={() => setSelectedPlace(null)} 
             onStartDirections={handleStartDirectionsFromPanel}
           />
@@ -723,7 +768,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       <MapStatusOverlays isLoaded={isLoaded} mapError={mapError} isDetailLoading={isDetailLoading} />
       {(mapWarning || locationIssue) && <div className="map-notices absolute z-[70] rounded-2xl border border-white/20 bg-slate-950/95 p-4 text-sm text-white shadow-xl">
         {mapWarning && <div role="alert" className="space-y-2"><p>{mapWarning}</p>
-          <BasemapSelector value={mapProvider?.id} providers={basemapProviders(MAPTILER_KEY)} onSelect={id => basemap.current?.select(id)} />
+          <BasemapSelector value={mapProvider?.id} providers={basemapProviders()} onSelect={id => basemap.current?.select(id)} />
           <button className="text-blue-300 font-bold" onClick={() => basemap.current?.reload()}>Thử tải lại bản đồ</button>
         </div>}
         {locationIssue && <div role="alert" className="space-y-2 mt-2"><p>{locationIssue}</p><button disabled={isLocating} className="text-blue-300 font-bold" onClick={() => handleLocateUser(true)}>Thử định vị lại</button></div>}
@@ -731,8 +776,11 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       <div className="map-controls absolute bottom-10 right-10 z-20 flex flex-col gap-3 items-end">
         <NavigationControls map={map.current} onLocate={handleLocateUser} bearing={bearing} isUserLocating={isUserLocating} isLocating={isLocating} />
         <ViewToggle is3D={is3D} onToggle={() => handleToggleView()} />
-        {!mapWarning && <BasemapSelector value={mapProvider?.id} providers={basemapProviders(MAPTILER_KEY)} onSelect={id => basemap.current?.select(id)} />}
+        {!mapWarning && <BasemapSelector value={mapProvider?.id} providers={basemapProviders()} onSelect={id => basemap.current?.select(id)} />}
       </div>
+      {isPickingOrigin && <div role="status" className="absolute top-48 left-4 z-[110] rounded-2xl border border-blue-400/30 bg-slate-950/95 p-4 text-sm text-white">
+        Chạm bản đồ để chọn điểm xuất phát <button className="ml-3 text-blue-300" onClick={() => { originPicking.current = false; setIsPickingOrigin(false); setIsDirectionsMode(true); }}>Hủy</button>
+      </div>}
       <LocationRequestPopup 
         isOpen={showLocationPopup}
         onConfirm={() => { setShowLocationPopup(false); handleLocateUser(true); }}

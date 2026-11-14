@@ -1,3 +1,5 @@
+> Cập nhật bản đồ chung: dùng `/map` cho cả online/offline, cùng component và OpenFreeMap Liberty. Hai URL cũ `/offline`, `/map/online` chuyển về `/map`; nguồn dữ liệu tự đổi theo mạng. Xem [hướng dẫn hiện tại](docs/OFFLINE.md).
+
 Nhánh tích hợp **`work-unified`** dùng chung online, offline và Capacitor. Xem [kiến trúc 3 lớp](../ARCHITECTURE.md) và [demo trên điện thoại](MOBILE.md).
 
 # MapAI - Trải Nghiệm Bản Đồ Thông Minh Thế Hệ Mới
@@ -12,16 +14,15 @@ Nhánh tích hợp **`work-unified`** dùng chung online, offline và Capacitor.
 
 🔐 **Đăng ký/đăng nhập:** Người dùng tự xác thực email, không cần admin duyệt. Xem [cách xác thực, gửi lại email và cấu hình gửi thư](../MapAI_BE-main/AUTH_INTEGRATION.md).
 
-🗺️ **Bản đồ đường phố và GPS:** Bản đồ OpenFreeMap không cần API key, có nguồn đường phố dự phòng và ô chọn nguồn. Xem [cách bật định vị trên Windows và kiểm tra bản đồ](MAP_AND_LOCATION.md).
+🗺️ **Bản đồ đường phố và GPS:** Bản đồ OpenFreeMap không cần API key, dùng cùng style cho cả online và offline. Xem [cách bật định vị trên Windows và kiểm tra bản đồ](MAP_AND_LOCATION.md).
 
 Chào mừng bạn đến với **MapAI** — trải nghiệm bản đồ thông minh kết hợp giữa thế giới 3D sống động và khả năng hỗ trợ bằng AI. Với MapAI, việc khám phá thành phố, đặc biệt là Đà Nẵng, trở nên dễ dàng, chính xác và đầy cảm hứng hơn.
-aaaa
 ---
 
 ## 🚀 Tính Năng Chính
 
 ### 1. Bản Đồ Tương Tác 3D (MapLibre GL)
-*   **Hiển thị Vector & Terrain:** Tích hợp dữ liệu địa hình 3D sinh động từ MapTiler.
+*   **Bản đồ vector OpenFreeMap:** Đường phố, nhãn và công trình với style Liberty; góc nhìn 2D/3D dùng chung cho cả hai chế độ.
 *   **Tương tác POV:** Chế độ Focus Mode cho phép dẫn đường góc nhìn thứ nhất với camera tự động xoay.
 *   **Place Details:** Hiển thị thông tin chi tiết địa điểm (ảnh, rating, mô tả) qua giao diện Glassmorphism hiện đại.
 
@@ -46,7 +47,7 @@ aaaa
 - **Frontend:** React 19, Vite 8, Tailwind CSS v4.
 - **Bản Đồ:** MapLibre GL, OSRM (Routing), Nominatim (Search).
 - **Trí Tuệ Nhân Tạo:** Gemini AI Assistant.
-- **Backend/Storage:** Tích hợp Supabase cho Authentication, Database và Storage.
+- **Backend/Storage:** Backend .NET dùng JWT và PostgreSQL; Supabase Storage dùng cho ảnh.
 - **Hiệu Ứng:** Framer Motion (Animation), Lucide React (Icons).
 
 ---
@@ -65,7 +66,7 @@ aaaa
 
 ### Bản đồ Offline-First (F0–F5)
 
-Mở **`/offline`** để dùng bản đồ PMTiles, tìm kiếm không dấu, yêu thích/lịch sử, chỉ đường A* và trợ lý tiếng Việt cục bộ. Không cần backend, tài khoản hay API key. Bản đồ online mở tại **`/map`** (alias `/map/online`), tự hiện bản offline khi mất mạng.
+Mở **`/map`**, chuẩn bị gói rồi ngắt mạng hoặc bật Giả lập Offline để dùng bản đồ PMTiles, tìm kiếm không dấu, yêu thích/lịch sử, chỉ đường A* và trợ lý tiếng Việt cục bộ. Không cần backend, tài khoản hay API key. Bản đồ giữ nguyên màn hình khi đổi mạng; `/map/online` và `/offline` là alias.
 
 Để demo mất mạng thật, dùng Node.js 22.12+ và chạy:
 
@@ -75,7 +76,7 @@ npm run build
 npm run preview -- --host 0.0.0.0
 ```
 
-Mở `/offline` khi có mạng, chờ huy hiệu **Đà Nẵng sẵn sàng**, sau đó ngắt mạng và tải lại. `npm run dev` không bật Service Worker. Bản triển khai cần HTTPS (hoặc localhost). Công tắc giả lập nằm trong cửa sổ quản lý dữ liệu.
+Mở `/map` khi có mạng, chờ huy hiệu **Đà Nẵng sẵn sàng**, sau đó ngắt mạng và tải lại. `npm run dev` không bật Service Worker. Bản triển khai cần HTTPS (hoặc localhost). Công tắc giả lập nằm trong cửa sổ quản lý dữ liệu.
 
 Gói hiện có 28 địa điểm tuyển chọn và đường bộ khu vực trung tâm Đà Nẵng. Ảnh là minh họa, giá/giờ là tham khảo. Xem [hướng dẫn Offline](docs/OFFLINE.md) để biết phạm vi, cấu trúc, nguồn OSM, cách cập nhật dữ liệu và chạy kiểm thử.
 

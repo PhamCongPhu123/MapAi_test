@@ -2,7 +2,7 @@
 
 Nhánh `work-unified` dùng chung React/Vite cho website và Capacitor. Bản đồ online và offline nằm trong cùng ứng dụng; backend .NET chạy độc lập để cung cấp tài khoản, dữ liệu live và Gemini. Bản đồ offline, tìm kiếm, chỉ đường A* và trợ lý cục bộ dùng gói Đà Nẵng có sẵn, không cần backend.
 
-Kiến trúc tuân theo [3 lớp giao diện — nghiệp vụ — dữ liệu](../ARCHITECTURE.md). `/offline` luôn dùng dữ liệu cục bộ; `/map` dùng online và tự chuyển sang giao diện offline khi mất mạng.
+Kiến trúc tuân theo [3 lớp giao diện — nghiệp vụ — dữ liệu](../ARCHITECTURE.md). `/map` dùng cùng giao diện và MapLibre canvas cho cả hai chế độ; nguồn tìm kiếm, chi tiết, tuyến và trợ lý tự đổi theo mạng. `/offline` và `/map/online` là alias chuyển về `/map`. Bản đồ đọc công khai; thao tác ghi dữ liệu vẫn cần tài khoản.
 
 ## Đã tích hợp
 
@@ -32,9 +32,9 @@ cd android
 
 Windows dùng `.\gradlew.bat assembleDebug`. Cài `android/app/build/outputs/apk/debug/app-debug.apk` lên điện thoại bằng Android Studio, chuyển file APK hoặc `adb install -r app/build/outputs/apk/debug/app-debug.apk` từ thư mục `android/`.
 
-Bản này mở thẳng `/offline`. Giao diện, font, bản đồ PMTiles, ảnh và dữ liệu đường nằm trong APK; có thể bật chế độ máy bay **trước lần mở đầu**. Không cần Vite hoặc máy tính sau khi cài. Thử tìm “mi quang”, mở chi tiết, lưu yêu thích và chọn Cầu Rồng làm điểm xuất phát để tính đường. GPS cần cấp quyền và có thể mất thời gian bắt tín hiệu; luôn có chọn mốc/chạm bản đồ.
+Bản này mở thẳng `/map`, tự dùng nguồn cục bộ vì không có URL backend. Giao diện, font, bản đồ PMTiles, ảnh và dữ liệu đường nằm trong APK; có thể bật chế độ máy bay **trước lần mở đầu**. Không cần Vite hoặc máy tính sau khi cài. Thử tìm “mi quang”, mở chi tiết, lưu yêu thích và chọn Cầu Rồng làm điểm xuất phát để tính đường. GPS cần cấp quyền và có thể mất thời gian bắt tín hiệu; luôn có chọn mốc/chạm bản đồ.
 
-`mobile:sync:offline` bỏ URL backend; nút online sẽ hướng dẫn cấu hình. Để demo cả hai chế độ trong một APK, dùng `mobile:sync:dev` bên dưới với backend đang chạy. Gói offline vẫn có sẵn trong bản đầy đủ, kể cả khi API lỗi. Nếu chỉ server lỗi mà thiết bị vẫn có mạng, chọn **Dùng bản đồ offline** trên bản đồ online.
+`mobile:sync:offline` bỏ URL backend; nút online sẽ hướng dẫn cấu hình. Để demo cả hai chế độ trong một APK, dùng `mobile:sync:dev` bên dưới với backend đang chạy. Gói offline vẫn có sẵn trong bản đầy đủ, kể cả khi API lỗi. Nếu chỉ server lỗi mà thiết bị vẫn có mạng, chọn **Giả lập Offline** trong cửa sổ **Dữ liệu** để thử nguồn cục bộ; ngắt mạng thật để kiểm tra chuyển tự động.
 
 Bản native build vào `dist-native/`, tách với website PWA `dist/`, và không đăng ký Service Worker. Sau mỗi thay đổi source phải sync/build lại. Sync gói demo sang iOS trên Mac: `npm run mobile:sync:offline -- ios`.
 
@@ -99,7 +99,7 @@ Android chỉ cho phép HTTP trong manifest debug. Lệnh development dùng loca
 ## 5. Phần cần cấu hình riêng
 
 - **Google login:** `@react-oauth/google` là SDK web. Mobile hiện dùng email/mật khẩu và ẩn nút Google web để tránh luồng OAuth không hỗ trợ WebView. Để bật Google native cần thêm plugin đăng nhập native, OAuth client Android/iOS và Web Client ID khớp `Google:ClientId` của backend; Android cần package ID và SHA của chứng chỉ ký. Chưa cấu hình hoặc kiểm thử Google native trong thay đổi này. Website vẫn dùng Google khi có `VITE_GOOGLE_CLIENT_ID`.
-- **Bản đồ:** Khi thiếu `VITE_MAPTILER_KEY`, app dùng OpenFreeMap và tự chuyển sang OpenStreetMap France/OpenStreetMap nếu nguồn trước lỗi. Có thể chọn nguồn ở góc dưới phải. MapTiler là tùy chọn; key công khai phía frontend phải cho phép origin WebView (`http://localhost` khi Android development, `https://localhost` khi Android production, `capacitor://localhost` trên iOS). Camera, marker và tuyến đường được giữ khi đổi nguồn. Xem [bản đồ và định vị](MAP_AND_LOCATION.md).
+- **Bản đồ:** cả hai chế độ dùng OpenFreeMap Liberty. Gói nhúng chứa tile OpenFreeMap thật, sprite và glyph, khoảng 19 MiB cùng POI/graph Đà Nẵng. Không cần MapTiler key. Khi đổi mạng, style giữ nguyên và chỉ thay URL nguồn; offline giới hạn trong vùng đã tải. `VITE_MAPTILER_KEY` cũ không còn chọn nguồn khác. Xem [offline/OpenFreeMap](docs/OFFLINE.md).
 - **AI, email, PostgreSQL, Supabase:** giữ trên backend. Không chép password, Gemini key, JWT secret hoặc Supabase service role vào frontend. Mọi biến `VITE_*` đều đọc được từ APK/IPA.
 - **Email xác thực / quên mật khẩu:** app đã nhận custom scheme như ví dụ dưới; backend hiện vẫn gửi link website theo `FrontendUrl`. Cần thay đổi luồng gửi/chuyển tiếp link hoặc cấu hình Universal Links/App Links riêng nếu muốn email mở app tự động. Không đổi `FrontendUrl` thành custom scheme một cách trực tiếp vì backend đang ghép đường dẫn web.
 

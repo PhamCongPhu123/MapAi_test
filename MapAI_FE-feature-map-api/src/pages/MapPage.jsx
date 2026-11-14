@@ -1,27 +1,39 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, User, Sparkles, Search, ChevronRight, ChevronLeft, MessageSquare, Navigation, MapPin, Globe, X } from 'lucide-react';
+import { ArrowLeft, Send, User, Sparkles, Search, ChevronRight, ChevronLeft, MessageSquare, Navigation, MapPin, Globe, X, Database, Wifi, WifiOff, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import MapLibreView from '../components/MapLibreView';
 import SearchBar from '../components/SearchBar';
 import SearchSuggestions from '../components/SearchSuggestions';
-import { askMapAI } from '../services/aiService';
-import { searchNearbyPlaces, searchCityWidePlaces } from '../services/mapServices';
 import { useToast } from '../hooks/useToast';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import ContributionList from '../components/Community/ContributionList';
 import { mapTools } from '../services/mapTools';
 import { executeMapAction, isMapToolAction } from '../utils/executeMapAction';
+import { useMapSession } from '../map/presentation/useMapSession';
+import { useAuth } from '../hooks/useAuth';
+import OfflineDataModal from '../features/offline/OfflineDataModal';
+import SavedPlacesDialog from '../map/presentation/SavedPlacesDialog';
+import '../design-system/offline.css';
 
 const MapPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { service, mode, resource, network, hasApi, ready } = useMapSession();
+  const { user } = useAuth();
+  const [dataOpen, setDataOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const closeData = useCallback(() => setDataOpen(false), []);
+  const closeSaved = useCallback(() => setSavedOpen(false), []);
+  const localContext = useRef({});
+  const [aiPending, setAiPending] = useState(null);
+  const isAiLoading = aiPending?.mode === mode;
   const { addToast, removeToast } = useToast();
   const [input, setInput] = useState('');
   const isMobile = useMediaQuery('(max-width: 1023px)');
   const [isChatCollapsed, setIsChatCollapsed] = useState(() => window.matchMedia('(max-width: 1023px)').matches);
   const [isDirectionsMode, setIsDirectionsMode] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
-  const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSearchingNearby, setIsSearchingNearby] = useState(false);
   const [hasNearbyResults, setHasNearbyResults] = useState(false);
   const [pendingNearbySearch, setPendingNearbySearch] = useState(null);
@@ -33,7 +45,9 @@ const MapPage = () => {
   useEffect(() => {
     const onBack = event => {
       if (event.defaultPrevented) return;
-      if (showContributions) {
+      if (dataOpen || savedOpen) {
+        event.preventDefault(); setDataOpen(false); setSavedOpen(false);
+      } else if (showContributions) {
         event.preventDefault();
         setShowContributions(false);
       } else if (isMobile && !isChatCollapsed) {
@@ -47,7 +61,7 @@ const MapPage = () => {
     };
     window.addEventListener('mapai:back', onBack);
     return () => window.removeEventListener('mapai:back', onBack);
-  }, [isMobile, isChatCollapsed, isNavigating, isDirectionsMode, showContributions]);
+  }, [isMobile, isChatCollapsed, isNavigating, isDirectionsMode, showContributions, dataOpen, savedOpen]);
 
   // Hàm thực hiện tìm kiếm Nearby thực tế
   const executeNearbySearch = useCallback(async (query, lat, lng) => {
@@ -57,7 +71,7 @@ const MapPage = () => {
     const loadingToastId = addToast(`Đang tìm ${query} gần bạn...`, "loading", Infinity);
 
     try {
-      const places = await searchNearbyPlaces(lat, lng, query, 2000);
+      const places = await service.nearby(query, lat, lng, 2000);
       removeToast(loadingToastId);
       
       if (places && places.length > 0) {
@@ -75,7 +89,7 @@ const MapPage = () => {
       setIsSearchingNearby(false);
       setPendingNearbySearch(null);
     }
-  }, [addToast, removeToast]);
+  }, [addToast, removeToast, service]);
 
   // Callback khi vị trí được xác định từ MapLibreView
   const handleLocationFound = useCallback((locData) => {
@@ -92,7 +106,9 @@ const MapPage = () => {
 
     try {
       // Sử dụng API City-Wide mới cho các nút gợi ý dưới thanh tìm kiếm
-      const places = await searchCityWidePlaces(suggestion.query);
+      const requestMode = service.mode();
+      const places = await service.category(suggestion.query);
+      if (requestMode !== service.mode()) { removeToast(loadingToastId); return; }
       
       removeToast(loadingToastId);
       
@@ -101,7 +117,7 @@ const MapPage = () => {
         setHasNearbyResults(true);
         addToast(`Tìm thấy ${places.length} ${suggestion.label} tại Đà Nẵng!`, "success");
       } else {
-        addToast(`Không tìm thấy ${suggestion.label} nào.`, "info");
+        addToast(mode === 'offline' ? `Chưa có ${suggestion.label} trong gói đã tải.` : `Không tìm thấy ${suggestion.label} nào.`, "info");
       }
     } catch (error) {
       removeToast(loadingToastId);
@@ -169,11 +185,15 @@ const MapPage = () => {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setPendingNearbySearch(null);
-    setIsAiLoading(true);
+    const requestMode = service.mode();
+    const requestId = crypto.randomUUID();
+    setAiPending({ mode: requestMode, id: requestId });
 
     try {
       // Gọi Gemini AI
-      const response = await askMapAI(messageText, messages.slice(-5), lastAiPlace.current);
+      const response = await service.ask(messageText, messages.slice(-5), lastAiPlace.current, localContext.current);
+      if (requestMode !== service.mode()) return;
+      if (response.context) localContext.current = response.context;
       console.log("Raw AI Response received in MapPage:", response);
       
       const aiMsg = {
@@ -183,6 +203,7 @@ const MapPage = () => {
         error: Boolean(response.error),
         errorCode: response.errorCode,
         location: response.location,
+        places: response.places,
         suggestions: response.suggestions,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
@@ -206,6 +227,12 @@ const MapPage = () => {
         } catch (error) {
           setMessages(prev => [...prev, { id: crypto.randomUUID(), type: 'ai', text: error.message }]);
         }
+        return;
+      }
+
+      if (response.action?.type === 'LOCAL_DIRECTIONS') {
+        mapRef.current?.startDirections(response.action.value);
+        if (isMobile) setIsChatCollapsed(true);
         return;
       }
 
@@ -239,7 +266,7 @@ const MapPage = () => {
           } else {
             const locName = target_location || (typeof value === 'string' ? value : value?.name);
             console.log("Action: Searching and flying to location name:", locName);
-            searchCityWidePlaces(locName).then(places => {
+            service.category(locName).then(places => {
               if (places && places.length > 0) {
                 const place = places[0];
                 const latNum = parseFloat(place.lat || place.latitude);
@@ -281,7 +308,7 @@ const MapPage = () => {
             console.log("Action: Searching and setting direction to name:", destName);
             setIsDirectionsMode(true);
             
-            searchCityWidePlaces(destName).then(places => {
+            service.category(destName).then(places => {
               if (places && places.length > 0) {
                 const place = places[0];
                 const latNum = parseFloat(place.lat || place.latitude);
@@ -334,7 +361,7 @@ const MapPage = () => {
           const query = search_query || value || messageText;
           console.log("Action: CityWide Search for:", query);
           const loadingId = addToast(`Đang tìm ${query} tại Đà Nẵng...`, "loading", Infinity);
-          searchCityWidePlaces(query).then(places => {
+          service.category(query).then(places => {
             removeToast(loadingId);
             if (places && places.length > 0) {
               mapRef.current.setNearbyMarkers(places);
@@ -361,12 +388,12 @@ const MapPage = () => {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
     } finally {
-      setIsAiLoading(false);
+      setAiPending(current => current?.id === requestId ? null : current);
     }
   };
 
   return (
-    <div className="map-page flex h-dvh w-full bg-[#0a0a0a] text-gray-100 overflow-hidden font-sans relative">
+    <div data-map-mode={mode} className="map-page flex h-dvh w-full bg-[#0a0a0a] text-gray-100 overflow-hidden relative">
       
       {/* --- PHẦN BẢN ĐỒ --- */}
       <motion.div 
@@ -380,7 +407,7 @@ const MapPage = () => {
               <motion.button aria-label="Về trang chủ" onClick={() => navigate('/')} className="shrink-0 p-3 bg-white/10 backdrop-blur-md rounded-full border border-white/10 hover:bg-white/20 transition-all shadow-xl group">
                 <ArrowLeft className="w-6 h-6 text-white group-hover:-translate-x-1 transition-transform" />
               </motion.button>
-              <SearchBar />
+              <SearchBar service={service} mode={mode} onSelect={place => { lastAiPlace.current = place; mapRef.current?.showPlace(place); }} />
               {!isDirectionsMode && (
                 <motion.button aria-label="Chỉ đường" onClick={() => { setIsDirectionsMode(true); if (isMobile) setIsChatCollapsed(true); }} className="shrink-0 flex items-center gap-2 px-3 md:px-4 py-3 bg-white hover:bg-slate-100 text-slate-950 rounded-full shadow-xl font-black text-[9px] uppercase tracking-[0.15em] transition-all border border-white/20">
                   <Navigation size={18} className="text-blue-600" /> <span className="hidden md:inline">Chỉ đường</span>
@@ -395,15 +422,22 @@ const MapPage = () => {
               hasResults={hasNearbyResults} 
             />
             <div className="flex gap-2 overflow-x-auto pb-1">
-              <button onClick={() => navigate('/offline')} className="community-secondary shrink-0 bg-slate-950/90 text-blue-300">Dùng bản đồ offline</button>
-              <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => { setIsChatCollapsed(true); mapRef.current?.startContribution(); }}>+ Thêm địa điểm</button>
-              <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => { setIsChatCollapsed(true); mapRef.current?.dismissDetails(); setShowContributions(true); }}>Đóng góp của tôi</button>
+              <button data-testid="map-status" aria-label="Trạng thái kết nối và dữ liệu" onClick={() => setDataOpen(true)} className="community-secondary shrink-0 bg-slate-950/90 text-blue-300">
+                {mode === 'offline' ? <WifiOff size={16} /> : <Wifi size={16} />}
+                {network.simulated ? 'Giả lập Offline' : mode === 'offline' ? 'Offline' : 'Online'}
+                <span className="hidden sm:inline">· {ready ? 'Đà Nẵng sẵn sàng' : resource.data ? 'Dữ liệu đã lưu' : resource.status === 'installing' ? `Đang tải ${resource.progress}%` : 'Chưa có gói'}</span>
+              </button>
+              <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => setDataOpen(true)} aria-label="Quản lý dữ liệu bản đồ"><Database size={16} />Dữ liệu</button>
+              <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => setSavedOpen(true)}><Heart size={16} />Đã lưu / Gần đây</button>
+              <button className="community-secondary shrink-0 bg-slate-950/90" disabled={mode === 'offline'} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.startContribution(); }}>+ Thêm địa điểm</button>
+              <button className="community-secondary shrink-0 bg-slate-950/90" disabled={mode === 'offline'} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.dismissDetails(); setShowContributions(true); }}>Đóng góp của tôi</button>
               <button aria-label="Làm mới địa điểm MapAI" className="community-secondary shrink-0 bg-slate-950/90" onClick={() => window.dispatchEvent(new Event('mapai:places-changed'))}>Làm mới</button>
             </div>
           </div>
         )}
 
         <MapLibreView 
+          mapService={service} mode={mode} localData={resource.data} personal={resource.personal}
           mapRef={mapRef}
           isDirectionsMode={isDirectionsMode} 
           setIsDirectionsMode={setIsDirectionsMode}
@@ -474,14 +508,14 @@ const MapPage = () => {
                   <h1 className="text-lg font-black text-white tracking-tight uppercase italic">MapAI Assistant</h1>
                   <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping"></span>
-                    AI Online & Ready
+                    {mode === 'online' ? 'Dịch vụ online sẵn sàng' : 'Trợ lý cục bộ Đà Nẵng'}
                   </p>
                 </div>
                 {isMobile && <button aria-label="Đóng trợ lý AI" className="p-3 rounded-xl bg-white/5" onClick={() => setIsChatCollapsed(true)}><X size={20} /></button>}
               </div>
             </header>
 
-            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+            <div ref={chatScrollRef} role="log" aria-live="polite" aria-label="Hội thoại với MapAI" className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
                   <motion.div key={msg.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className={`flex w-full ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -499,11 +533,11 @@ const MapPage = () => {
                               lastAiPlace.current = place;
                               mapRef.current?.dismissDetails();
                               mapRef.current?.flyTo({ center: [place.lng, place.lat], zoom: 17, showMarker: false });
-                              if (place.locationId) window.showPlaceDetails?.(place.name, place.lng, place.lat, place.locationId);
+                              mapRef.current?.showPlace({ ...place, id: place.localId ? place.id : place.locationId || (place.source === 'osm' ? undefined : place.id) });
                               if (isMobile) setIsChatCollapsed(true);
                             }}>
                               <span className="block font-semibold">{place.name}</span>
-                              <span className="block text-slate-400">{place.distanceMeters >= 1000 ? `${(place.distanceMeters / 1000).toFixed(1)} km` : `${Math.round(place.distanceMeters)} m`} đường thẳng · {place.source === 'mapai' ? 'MapAI' : 'OpenStreetMap'}</span>
+                              <span className="block text-slate-400">{place.distanceMeters >= 1000 ? `${(place.distanceMeters / 1000).toFixed(1)} km` : `${Math.round(place.distanceMeters)} m`} đường thẳng · {place.source === 'offline' ? 'Gói Đà Nẵng' : place.source === 'mapai' ? 'MapAI' : 'OpenStreetMap'}</span>
                             </button>)}
                           </div>}
                           {msg.location && msg.location.address && (
@@ -551,11 +585,11 @@ const MapPage = () => {
               <form onSubmit={handleSend} className="relative group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-blue-500 transition-colors" />
                 <input
-                  type="text" value={input} onChange={(e) => setInput(e.target.value)} disabled={isAiLoading}
+                  type="text" aria-label="Hỏi trợ lý MapAI" value={input} onChange={(e) => setInput(e.target.value)} disabled={isAiLoading}
                   placeholder="Hỏi trợ lý MapAI..."
                   className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all text-[13px] text-white placeholder:text-gray-600"
                 />
-                <button type="submit" disabled={!input.trim() || isAiLoading} className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:grayscale text-white rounded-xl transition-all shadow-lg shadow-blue-500/30">
+                <button type="submit" aria-label="Gửi câu hỏi" disabled={!input.trim() || isAiLoading} className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:grayscale text-white rounded-xl transition-all shadow-lg shadow-blue-500/30">
                   <Send className="w-4 h-4" />
                 </button>
               </form>
@@ -563,7 +597,13 @@ const MapPage = () => {
           </>
         )}
       </motion.div>
-      {showContributions && <div className="community-overlay" role="dialog" aria-modal="true" aria-label="Đóng góp của tôi">
+      {dataOpen && <OfflineDataModal resource={resource} onClose={closeData} />}
+      {savedOpen && <SavedPlacesDialog resource={resource} onClose={closeSaved} onSelect={place => {
+        setSavedOpen(false); lastAiPlace.current = place; mapRef.current?.showPlace(place);
+        mapRef.current?.flyTo({ center: [place.lng, place.lat], zoom: 16, showMarker: false });
+      }} />}
+      {!hasApi && <p className="sr-only">Bản demo chưa có URL backend; đang dùng dữ liệu cục bộ.</p>}
+      {showContributions && mode === 'online' && <div className="community-overlay" role="dialog" aria-modal="true" aria-label="Đóng góp của tôi">
         <div className="community-dialog space-y-4"><header className="flex justify-between items-center gap-3"><h2 className="text-xl font-bold">Đóng góp của tôi</h2>
           <button className="community-secondary" aria-label="Đóng danh sách đóng góp" onClick={() => setShowContributions(false)}><X size={20} /></button></header>
           <ContributionList onView={place => {

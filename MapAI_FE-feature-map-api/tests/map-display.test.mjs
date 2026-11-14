@@ -1,112 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { basemapStyle, basemapProviders, streetStyle, monitorBasemap, mapTilerKey, OPENFREEMAP_STYLE, HOT_SOURCE, OSM_SOURCE } from '../src/services/mapBasemap.js';
+import { basemapStyle, basemapProviders, monitorBasemap, OPENFREEMAP_STYLE } from '../src/services/mapBasemap.js';
 import { toLngLat, placesGeoJSON } from '../src/utils/mapCoordinates.js';
 import { requestCurrentLocation } from '../src/services/locationProvider.js';
 import { locationErrorMessage } from '../src/services/deviceLocation.js';
 
-test('keyless maps use OpenFreeMap with independent raster fallbacks and required credits', () => {
-  for (const key of [undefined, '', ' ', 'YOUR_MAPTILER_KEY_HERE']) {
+test('all configurations use only OpenFreeMap, including a legacy MapTiler key', () => {
+  for (const key of [undefined, '', 'old-key']) {
     assert.equal(basemapStyle(key), OPENFREEMAP_STYLE);
-    assert.deepEqual(basemapProviders(key).map(p => p.id), ['openfreemap', 'hot', 'osm']);
+    assert.deepEqual(basemapProviders(key).map(p => p.id), ['openfreemap']);
   }
-  const hot = streetStyle('hot');
-  assert.match(hot.sources[HOT_SOURCE].tiles[0], /tile\.openstreetmap\.fr/);
-  assert.match(hot.sources[HOT_SOURCE].attribution, /OpenStreetMap France/);
-  assert.match(hot.sources[HOT_SOURCE].attribution, /OpenStreetMap contributors/);
-  assert.equal(streetStyle().sources[OSM_SOURCE].type, 'raster');
-  assert.doesNotMatch(JSON.stringify([hot, streetStyle()]), /demotiles|cartocdn/);
-  assert.equal(mapTilerKey(' key '), 'key');
-  assert.match(basemapStyle(' key '), /key=key$/);
 });
-
-class TestMap extends EventEmitter {
-  styles = [];
-  isStyleLoaded() { return false; }
-  setTerrain() { throw new Error('Must not change terrain before a style loads'); }
-  setStyle(style) { this.styles.push(style); }
-}
-test('independent providers fail over once per cycle, report statuses and ignore stale errors', () => {
-  const map = new TestMap();
-  const ready = [], warnings = [];
-  const control = monitorBasemap(map, 'test-only', { onReady: value => ready.push(value), onChanging() {}, onWarning: value => warnings.push(value) });
-  map.emit('error', { error: { status: 401, url: 'https://api.maptiler.com/style?key=do-not-display' } });
-  assert.equal(map.styles[0], OPENFREEMAP_STYLE);
+class TestMap extends EventEmitter {}
+test('OpenFreeMap failures are actionable and never switch to a different provider', () => {
+  const map = new TestMap(), warnings = [], ready = [];
+  let retries = 0;
+  const control = monitorBasemap(map, null, { onReady: value => ready.push(value), onChanging() {}, onWarning: value => warnings.push(value), onReload: () => retries++ });
+  map.emit('error', { error: { status: 503, url: 'https://tiles.openfreemap.org/private-error-details' } });
+  assert.match(warnings.at(-1), /OpenFreeMap.*HTTP 503/);
+  assert.doesNotMatch(warnings.at(-1), /private-error-details/);
   map.emit('style.load');
   assert.deepEqual(ready, [{ vector: true, provider: 'openfreemap' }]);
-  map.emit('error', { error: { status: 401, url: 'https://api.maptiler.com/old-request' } });
-  assert.equal(map.styles.length, 1);
-  map.emit('error', { error: { status: 503, url: OPENFREEMAP_STYLE } });
-  assert.deepEqual(map.styles[1], streetStyle('hot'));
-  map.emit('error', { sourceId: HOT_SOURCE, error: { status: 403 } });
-  assert.deepEqual(map.styles[2], streetStyle('osm'));
-  map.emit('error', { sourceId: OSM_SOURCE, error: { status: 429 } });
-  assert.match(warnings.at(-1), /HTTP 401/);
-  assert.match(warnings.at(-1), /HTTP 503/);
-  assert.match(warnings.at(-1), /HTTP 403/);
-  assert.match(warnings.at(-1), /HTTP 429/);
-  assert.doesNotMatch(warnings.join(' '), /do-not-display/);
-  assert.equal(map.styles.length, 3); // No automatic cycling forever.
-  map.emit('error', { sourceId: HOT_SOURCE, error: { status: 503 } });
-  assert.equal(map.styles.length, 3);
-  map.emit('sourcedata', { sourceId: 'mapai-places', tile: { state: 'loaded' } });
-  assert.notEqual(warnings.at(-1), null);
-  map.emit('sourcedata', { sourceId: OSM_SOURCE, tile: { state: 'loaded' } });
+  map.emit('sourcedata', { sourceId: 'openmaptiles', tile: { state: 'loaded' } });
   assert.equal(warnings.at(-1), null);
-  control.select('hot');
-  assert.deepEqual(map.styles.at(-1), streetStyle('hot'));
-  map.emit('sourcedata', { sourceId: OSM_SOURCE, tile: { state: 'loaded' } });
-  control.dispose();
-  assert.equal(map.listenerCount('error'), 0);
-  assert.equal(map.listenerCount('style.load'), 0);
+  control.reload(); assert.equal(retries, 1);
+  control.dispose(); assert.equal(map.listenerCount('error'), 0);
 });
-test('a stalled basemap switches after its deadline; a received tile cancels the watchdog', t => {
+test('a stalled OpenFreeMap reports a deadline and a real map tile cancels it', t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const map = new TestMap();
-  const control = monitorBasemap(map, null, { onReady() {}, onChanging() {}, onWarning() {}, timeoutMs: 100 });
-  t.mock.timers.tick(100);
-  assert.deepEqual(map.styles, [streetStyle('hot')]);
-  map.emit('sourcedata', { sourceId: HOT_SOURCE, tile: { state: 'loaded' } });
-  t.mock.timers.tick(1000);
-  assert.equal(map.styles.length, 1);
-  control.dispose();
-});
-test('failed terrain is disabled without replacing streets; late terrain errors do not affect another provider', () => {
-  const map = new TestMap();
-  let terrain = { source: 'maptiler-terrain' };
-  map.getTerrain = () => terrain;
-  map.setTerrain = value => { terrain = value; };
-  const warnings = [];
-  const control = monitorBasemap(map, 'test-only', { onReady() {}, onChanging() {}, onWarning: value => warnings.push(value) });
-  map.emit('error', { sourceId: 'maptiler-terrain' });
-  assert.equal(terrain, null);
-  assert.equal(map.styles.length, 0);
-  assert.match(warnings.at(-1), /địa hình 3D/);
-  map.emit('error', { error: { status: 401 } });
-  const warning = warnings.at(-1);
-  map.emit('error', { sourceId: 'maptiler-terrain' });
-  assert.equal(warnings.at(-1), warning);
-  control.dispose();
-});
-test('a late tile from the previous raster source cannot cancel the new vector source deadline', t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const map = new TestMap();
-  const control = monitorBasemap(map, null, { onReady() {}, onChanging() {}, onWarning() {}, timeoutMs: 100 });
-  control.select('hot');
-  map.emit('sourcedata', { sourceId: HOT_SOURCE, tile: { state: 'loaded' } });
-  control.select('openfreemap');
-  map.emit('sourcedata', { sourceId: HOT_SOURCE, tile: { state: 'loaded' } });
-  t.mock.timers.tick(100);
-  assert.deepEqual(map.styles, [streetStyle('hot'), OPENFREEMAP_STYLE, streetStyle('hot')]);
-  control.dispose();
-});
-test('errors from community points or a route do not replace the basemap', () => {
-  const map = new TestMap();
-  const control = monitorBasemap(map, 'test-only', { onReady() {}, onChanging() {}, onWarning() {} });
-  map.emit('error', { sourceId: 'mapai-places' });
-  map.emit('error', { sourceId: 'route' });
-  assert.equal(map.styles.length, 0);
+  const map = new TestMap(), warnings = [];
+  const control = monitorBasemap(map, null, { onReady() {}, onChanging() {}, onWarning: value => warnings.push(value), timeoutMs: 100 });
+  t.mock.timers.tick(100); assert.match(warnings.at(-1), /Chưa tải được.*OpenFreeMap/);
+  control.reload();
+  map.emit('sourcedata', { sourceId: 'mapai-places', tile: { state: 'loaded' } });
+  t.mock.timers.tick(100); assert.match(warnings.at(-1), /Chưa tải được/);
+  control.reload();
+  map.emit('sourcedata', { sourceId: 'openmaptiles', tile: { state: 'loaded' } });
+  t.mock.timers.tick(1000); assert.equal(warnings.at(-1), null);
   control.dispose();
 });
 

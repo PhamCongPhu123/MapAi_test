@@ -33,7 +33,7 @@ export default function OfflineDataModal({ resource, onClose }) {
         {storage && <div><dt>Dung lượng toàn ứng dụng</dt><dd>{mb(storage.usage || 0)} / {mb(storage.quota || 0)}</dd></div>}
       </dl>
       <p className="offline-note">Gói trung tâm thành phố, gồm Hải Châu, Sơn Trà, Ngũ Hành Sơn, Cẩm Lệ và Thanh Khê trong khung bản đồ. Chưa bao gồm Bà Nà, toàn bán đảo Sơn Trà và Hội An.</p>
-      <p className="offline-note">© OpenStreetMap contributors · ODbL 1.0 · Đường bộ ngày 26/05/2026. Ảnh là minh họa; giờ và giá tham khảo, không phải dữ liệu trực tiếp.</p>
+      <p className="offline-note">OpenFreeMap · OpenMapTiles · © OpenStreetMap contributors · ODbL 1.0. Đường tính tuyến ngày 26/05/2026. Ảnh là minh họa; giờ và giá tham khảo, không phải dữ liệu trực tiếp.</p>
       {status === 'installing' && <div role="status"><p>Đang tải và kiểm tra dữ liệu: {progress}%</p><progress value={progress} max="100" aria-label="Tiến độ tải gói Đà Nẵng" /></div>}
       {(error || pwa.error) && <p className="offline-error" role="alert">{error || `Chưa lưu được giao diện: ${pwa.error}`}</p>}
       <button className="offline-button primary" disabled={(network.offline && !offlineService.embedded) || status === 'installing'} onClick={sync}>

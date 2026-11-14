@@ -128,7 +128,10 @@ test('PMTiles archive can be read with real tile contents in the city', async ()
   const reader = new PMTiles(new FileSource(new File([fs.readFileSync(new URL('danang.pmtiles', root))], 'danang.pmtiles')));
   const header = await reader.getHeader();
   assert.equal(header.specVersion, 3); assert.equal(header.tileType, 1);
-  assert.ok(header.numAddressedTiles > 200);
+  assert.equal(header.numAddressedTiles, read('manifest.json').tileCount);
+  const metadata = await reader.getMetadata();
+  assert.match(metadata.attribution, /OpenFreeMap/);
+  assert.ok(metadata.vector_layers.some(layer => layer.id === 'transportation'));
   const z = 13, x = Math.floor((108.224 + 180) / 360 * 2 ** z);
   const y = Math.floor((1 - Math.asinh(Math.tan(16.061 * Math.PI / 180)) / Math.PI) / 2 * 2 ** z);
   assert.ok((await reader.getZxy(z, x, y)).data.byteLength > 1000);
