@@ -35,10 +35,11 @@ const Explore = () => {
     fetchData();
   }, []);
 
-  // Reset page when tab or search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchTerm]);
+  // Reset pagination in the same event as the search, without an extra render effect.
+  const handleSearchChange = (value) => {
+    setSearchTerm(value);
+    if (value !== searchTerm) setCurrentPage(1);
+  };
 
   // Xử lý filter
   const filteredLocations = useMemo(() => {
@@ -67,7 +68,7 @@ const Explore = () => {
   }, [filteredLocations, currentPage]);
 
   const handleLocationClick = (loc) => {
-    navigate(`/map/online?lat=${loc.lat}&lng=${loc.lng}`);
+    navigate(`/map?placeId=${encodeURIComponent(loc.id)}&lat=${loc.lat}&lng=${loc.lng}`);
   };
 
   const quickSuggestions = ["Ăn gì", "Cafe đẹp", "Check-in", "Cầu Rồng"];
@@ -120,7 +121,7 @@ const Explore = () => {
                 className="w-full bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-3xl py-4 pl-14 pr-6 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all text-lg"
                 value={searchTerm}
                 onChange={(e) => {
-                  setSearchTerm(e.target.value);
+                  handleSearchChange(e.target.value);
                   setIsSearching(e.target.value.length > 0);
                 }}
               />
@@ -150,7 +151,7 @@ const Explore = () => {
               {quickSuggestions.map(tag => (
                 <button 
                   key={tag}
-                  onClick={() => setSearchTerm(tag)}
+                  onClick={() => handleSearchChange(tag)}
                   className="px-4 py-1.5 rounded-full bg-slate-900/50 border border-slate-800 text-sm text-slate-400 hover:text-white hover:border-indigo-500/50 transition-all cursor-pointer"
                 >
                   {tag}
@@ -166,7 +167,10 @@ const Explore = () => {
             {categories.map(cat => (
               <button
                 key={cat.id}
-                onClick={() => setActiveTab(cat.id)}
+                onClick={() => {
+                  setActiveTab(cat.id);
+                  if (cat.id !== activeTab) setCurrentPage(1);
+                }}
                 className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl transition-all ${
                   activeTab === cat.id 
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 

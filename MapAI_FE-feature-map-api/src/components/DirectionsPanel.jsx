@@ -11,7 +11,8 @@ const DirectionsPanel = ({
   isNavigating,
   initialOrigin = null, 
   initialDestination = null, 
-  routeInfo = null 
+  routeInfo = null,
+  initialMode = 'driving'
 }) => {
   const [originQuery, setOriginQuery] = useState(initialOrigin?.name || '');
   const [destQuery, setDestQuery] = useState(initialDestination?.name || '');
@@ -20,7 +21,7 @@ const DirectionsPanel = ({
   const [results, setResults] = useState({ type: null, items: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [activeInput, setActiveInput] = useState(null);
-  const [travelMode, setTravelMode] = useState('driving');
+  const [travelMode, setTravelMode] = useState(initialMode);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   const steps = routeInfo?.legs?.[0]?.steps || [];
@@ -156,10 +157,10 @@ const DirectionsPanel = ({
         animate={{ 
           width: isNavigating ? '420px' : '410px',
           height: isNavigating ? '110px' : 'auto',
-          maxHeight: isNavigating ? '110px' : 'calc(100vh - 120px)',
+          maxHeight: isNavigating ? '110px' : 'calc(100dvh - 120px)',
           x: isNavigating ? 0 : 0
         }}
-        className="absolute top-24 left-6 bg-slate-950/98 backdrop-blur-3xl border border-white/10 z-[100] flex flex-col shadow-[0_30px_60px_rgba(0,0,0,0.8)] rounded-[2rem] overflow-hidden transition-all duration-500"
+        className="directions-panel absolute top-24 left-6 bg-slate-950/98 backdrop-blur-3xl border border-white/10 z-[100] flex flex-col shadow-[0_30px_60px_rgba(0,0,0,0.8)] rounded-[2rem] overflow-hidden transition-all duration-500"
       >
         {!isNavigating ? (
           /* --- PHẦN CHI TIẾT (Trạng thái chuẩn bị) --- */
@@ -172,7 +173,7 @@ const DirectionsPanel = ({
                 </div>
                 <div className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
                   {TRAVEL_MODES.map(m => (
-                    <button key={m.id} onClick={() => setTravelMode(m.id)} className={`p-2 rounded-lg transition-all ${travelMode === m.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-white/30 hover:text-white'}`}>{React.cloneElement(m.icon, { size: 14 })}</button>
+                    <button key={m.id} aria-label={`Phương tiện: ${m.label}`} aria-pressed={travelMode === m.id} onClick={() => setTravelMode(m.id)} className={`p-2 rounded-lg transition-all ${travelMode === m.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-white/30 hover:text-white'}`}>{React.cloneElement(m.icon, { size: 14 })}</button>
                   ))}
                 </div>
               </div>

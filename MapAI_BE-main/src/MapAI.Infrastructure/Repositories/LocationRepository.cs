@@ -1,9 +1,11 @@
+using MapAI.Infrastructure.Persistence;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using MapAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using MapAI.Domain.Enums;
 
 namespace MapAI.Infrastructure.Repositories
 {
@@ -16,14 +18,16 @@ namespace MapAI.Infrastructure.Repositories
             _context = context;
         }
 
+        private IQueryable<LocationEntity> Published() => _context.Locations.Where(l => l.Status == LocationStatus.Approved && !l.IsDeleted);
+
         public async Task<LocationEntity?> GetByIdAsync(string id)
         {
-            return await _context.Locations.FindAsync(id);
+            return await Published().FirstOrDefaultAsync(l => l.Id == id);
         }
 
         public async Task<IEnumerable<LocationEntity>> GetAllAsync()
         {
-            return await _context.Locations.ToListAsync();
+            return await Published().ToListAsync();
         }
 
         public async Task<IEnumerable<LocationEntity>> SearchByTitleAsync(string title)
@@ -34,7 +38,7 @@ namespace MapAI.Infrastructure.Repositories
                                   .Where(w => w.Length > 2)
                                   .ToList();
             
-            var query = _context.Locations.AsQueryable();
+            var query = Published();
             
             // 1. Luôn ưu tiên khớp chứa toàn bộ cụm từ trước
             var results = await query
@@ -56,7 +60,7 @@ namespace MapAI.Infrastructure.Repositories
 
         public async Task<IEnumerable<LocationEntity>> GetByCoordinatesAsync(double lat, double lng, double epsilon = 0.002)
         {
-            return await _context.Locations
+            return await Published()
                 .Where(l => Math.Abs(l.Latitude - lat) <= epsilon && 
                             Math.Abs(l.Longitude - lng) <= epsilon)
                 .ToListAsync();
@@ -64,7 +68,7 @@ namespace MapAI.Infrastructure.Repositories
 
         public async Task<IEnumerable<LocationEntity>> GetPagedAsync(int pageNumber, int pageSize)
         {
-            return await _context.Locations
+            return await Published()
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
@@ -72,7 +76,7 @@ namespace MapAI.Infrastructure.Repositories
 
         public async Task<int> GetCountAsync()
         {
-            return await _context.Locations.CountAsync();
+            return await Published().CountAsync();
         }
 
         public async Task<LocationEntity> AddAsync(LocationEntity location)
@@ -100,7 +104,7 @@ namespace MapAI.Infrastructure.Repositories
 
         public async Task<bool> ExistsAsync(string id)
         {
-            return await _context.Locations.AnyAsync(e => e.Id == id);
+            return await Published().AnyAsync(e => e.Id == id);
         }
     }
 }

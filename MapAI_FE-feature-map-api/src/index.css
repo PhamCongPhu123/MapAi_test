@@ -1,5 +1,199 @@
 @import "tailwindcss";
 
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+html, body, #root {
+  min-height: 100%;
+  min-width: 320px;
+}
+
+body {
+  margin: 0;
+  overscroll-behavior-y: none;
+}
+
+button, a, input, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-header {
+  height: calc(4rem + var(--safe-top));
+  padding-top: var(--safe-top);
+  padding-left: max(1rem, var(--safe-left));
+  padding-right: max(1rem, var(--safe-right));
+}
+
+.main-content {
+  padding-top: calc(4rem + var(--safe-top));
+}
+
+.main-layout {
+  padding-bottom: calc(4rem + var(--safe-bottom));
+}
+
+.mobile-navigation {
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+.map-search {
+  top: calc(1.5rem + var(--safe-top));
+  max-width: calc(100% - 3rem);
+}
+
+.directions-panel {
+  top: calc(6rem + var(--safe-top));
+}
+
+.map-controls {
+  bottom: calc(2.5rem + var(--safe-bottom));
+  right: max(2.5rem, var(--safe-right));
+}
+
+.map-notices {
+  left: max(.75rem, var(--safe-left));
+  bottom: calc(6rem + var(--safe-bottom));
+  max-width: min(24rem, calc(100% - 5.5rem));
+  max-height: 50dvh;
+  overflow-y: auto;
+}
+
+@media (max-height: 500px) {
+  .map-controls { gap: .25rem; }
+  .map-controls button { padding: .5rem; }
+}
+
+.admin-layout {
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+.app-toasts { top: calc(1.5rem + var(--safe-top)); }
+
+@media (min-width: 1024px) {
+  .main-layout { padding-bottom: var(--safe-bottom); }
+}
+
+@media (max-width: 1023px) {
+  .app-toasts { left: .75rem; right: .75rem; }
+  .app-toasts > div > div { min-width: 0; max-width: 100%; }
+
+  .map-search {
+    top: calc(.75rem + var(--safe-top));
+    left: max(.75rem, var(--safe-left));
+    right: max(.75rem, var(--safe-right));
+    max-width: none;
+    gap: .75rem;
+  }
+
+  .map-controls {
+    right: max(.75rem, var(--safe-right));
+    bottom: calc(1.5rem + var(--safe-bottom));
+    gap: .5rem;
+  }
+
+  .map-chat-toggle {
+    left: max(1rem, var(--safe-left));
+    bottom: calc(1.5rem + var(--safe-bottom));
+  }
+
+  .map-chat {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 200;
+    height: min(75dvh, calc(100dvh - var(--safe-top) - 1rem));
+    border-radius: 1.5rem 1.5rem 0 0;
+    border-top: 1px solid rgb(255 255 255 / .1);
+    padding-bottom: var(--safe-bottom);
+  }
+
+  .map-chat > header { padding: 1rem; }
+  .map-chat > div { min-height: 0; }
+
+  .directions-panel {
+    left: max(.75rem, var(--safe-left));
+    right: max(.75rem, var(--safe-right));
+    top: calc(5rem + var(--safe-top));
+    width: auto !important;
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 7rem) !important;
+  }
+
+  .directions-panel > div { min-height: 0; overflow-y: auto; }
+
+  .place-detail-container {
+    inset: calc(5rem + var(--safe-top)) .75rem calc(1rem + var(--safe-bottom));
+    width: auto;
+    padding-top: 0;
+    align-items: flex-end;
+    perspective: none;
+  }
+
+  .place-detail-card {
+    width: 100%;
+    max-height: 100%;
+    transform: none !important;
+  }
+}
+
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px !important; }
+}
+
+.community-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, var(--safe-top)) max(1rem, var(--safe-right)) max(1rem, var(--safe-bottom)) max(1rem, var(--safe-left));
+  background: rgb(2 6 23 / .8);
+  backdrop-filter: blur(8px);
+}
+
+.community-dialog {
+  width: 100%;
+  max-width: 36rem;
+  max-height: 100%;
+  overflow-y: auto;
+  background: #0f172a;
+  color: #f1f5f9;
+  border: 1px solid rgb(255 255 255 / .12);
+  border-radius: 1.5rem;
+  padding: 1.25rem;
+}
+
+.community-field { display: flex; flex-direction: column; gap: .4rem; font-size: .875rem; color: #cbd5e1; }
+.community-field input, .community-field textarea, .community-field select {
+  min-width: 0;
+  width: 100%;
+  color: #f1f5f9;
+  background: #020617;
+  border: 1px solid #334155;
+  border-radius: .75rem;
+  padding: .7rem;
+}
+.community-field :focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.community-primary, .community-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 2.75rem;
+  border-radius: .75rem;
+  padding: .6rem .9rem;
+  font-size: .875rem;
+}
+.community-primary { background: #2563eb; color: white; font-weight: 600; }
+.community-secondary { background: rgb(255 255 255 / .06); border: 1px solid rgb(255 255 255 / .12); }
+.community-primary:disabled, .community-secondary:disabled { opacity: .5; cursor: not-allowed; }
+.place-picker { position: absolute; inset: 0; z-index: 150; pointer-events: none; }
+.place-picker-pin { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%); color: #a78bfa; }
+.place-picker-actions { position: absolute; left: 1rem; right: 1rem; bottom: calc(1rem + var(--safe-bottom)); pointer-events: auto; padding: 1rem; background: #0f172a; border-radius: 1rem; }
+
 @layer base {
   body {
     @apply bg-slate-950 text-slate-200 antialiased selection:bg-blue-500/30;

@@ -3,18 +3,38 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "lint:offline": "eslint src/offline src/features/offline src/pages/OfflineMapPage.jsx scripts/*.mjs tests playwright.config.js",
     "preview": "vite preview",
-    "test": "node --test tests/unit/*.test.js",
+    "test:mobile": "node --test tests/mobile.test.mjs",
+    "mobile:sync": "node scripts/mobile.mjs production",
+    "mobile:sync:dev": "node scripts/mobile.mjs development",
+    "android:open": "cap open android",
+    "ios:open": "cap open ios",
+    "test:mobile:e2e": "playwright test",
+    "test:map-actions": "node --test tests/map-actions.test.mjs",
+    "test:map-display": "node --test tests/map-display.test.mjs",
+    "test:ai-errors": "node --test tests/ai-errors.test.mjs",
+    "lint:offline": "eslint src/offline src/features/offline src/pages/OfflineMapPage.jsx scripts/*.mjs tests/unit tests/architecture.test.mjs tests/e2e/offline.spec.js tests/e2e/appearance.spec.js tests/e2e/package-integrity.spec.js tests/e2e/gps-and-sheet.spec.js playwright.offline.config.js",
+    "test": "node --test tests/unit/*.test.js tests/*.test.mjs",
     "test:e2e": "playwright test",
-    "offline:tiles": "node scripts/build-offline-tiles.mjs"
+    "offline:tiles": "node scripts/build-offline-tiles.mjs",
+    "mobile:sync:offline": "node scripts/mobile.mjs offline",
+    "test:architecture": "node --test tests/architecture.test.mjs",
+    "test:e2e:offline": "playwright test --config playwright.offline.config.js",
+    "test:native:offline": "playwright test --config playwright.native.config.js"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/geolocation": "^8.2.4",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/keyboard": "^8.0.6",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.4",
     "@fontsource/plus-jakarta-sans": "^5.3.0",
     "@react-oauth/google": "^0.13.4",
     "@tailwindcss/vite": "^4.2.2",
@@ -30,8 +50,10 @@
     "recharts": "^3.8.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.65.1",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
@@ -43,8 +65,12 @@
     "globals": "^17.4.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
+    "typescript": "~5.9.3",
     "vite": "^8.0.1",
     "vite-plugin-pwa": "^2.0.0",
     "vt-pbf": "^3.1.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

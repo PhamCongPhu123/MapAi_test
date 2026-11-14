@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { validateEmail } from "../utils/validators";
 import { 
   Mail, 
   ArrowRight, 
-  AlertCircle,
   CheckCircle,
   ArrowLeft
 } from "lucide-react";
@@ -16,7 +15,7 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
-  const [, setError] = useState("");
+  const [error, setError] = useState("");
   
   const { forgotPassword } = useAuth();
   const { addToast } = useToast();
@@ -24,10 +23,11 @@ export default function ForgotPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isLoading) return;
     setIsLoading(true);
     setError("");
 
-    if (!validateEmail(email)) {
+    if (!validateEmail(email.trim())) {
       setError("Địa chỉ email không hợp lệ.");
       addToast("Email không hợp lệ", "error");
       setIsLoading(false);
@@ -35,7 +35,7 @@ export default function ForgotPassword() {
     }
 
     try {
-      await forgotPassword(email);
+      await forgotPassword(email.trim());
       setIsSent(true);
       addToast("Yêu cầu khôi phục mật khẩu đã được gửi!", "success");
     } catch (err) {
@@ -64,7 +64,7 @@ export default function ForgotPassword() {
         >
           <div className="text-center mb-6">
             <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">Khôi phục mật khẩu</h1>
-            <p className="text-slate-500 font-bold text-[11px] uppercase tracking-[0.1em]">Gửi yêu cầu đặt lại thông tin truy cập</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Nhập email đã đăng ký để nhận liên kết đặt mật khẩu mới.</p>
           </div>
 
           <motion.div 
@@ -75,9 +75,10 @@ export default function ForgotPassword() {
             
             {!isSent ? (
               <form onSubmit={handleSubmit} className="space-y-6">
+                {error && <p role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
                 <div className="relative flex items-center">
                   <div className="flex-grow border-t border-white/5"></div>
-                  <span className="mx-4 text-[8px] font-black text-slate-600 uppercase tracking-[0.4em]">Recovery Protocol</span>
+                  <span className="mx-4 text-xs font-semibold text-slate-400">Khôi phục qua email</span>
                   <div className="flex-grow border-t border-white/5"></div>
                 </div>
 
@@ -85,6 +86,10 @@ export default function ForgotPassword() {
                   <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                     <input
+                      aria-label="Email đã đăng ký"
+                      autoComplete="email"
+                      maxLength={254}
+                      disabled={isLoading}
                       type="email"
                       required
                       value={email}
@@ -118,7 +123,7 @@ export default function ForgotPassword() {
                 </div>
                 <h2 className="text-xl font-black text-white mb-2">Đã gửi yêu cầu!</h2>
                 <p className="text-slate-500 text-[12px] font-bold mb-8 leading-relaxed">
-                  Vui lòng kiểm tra hộp thư đến của <b className="text-slate-300">{email}</b> để nhận hướng dẫn khôi phục mật khẩu.
+                  Nếu <b className="text-slate-300">{email.trim()}</b> đã được đăng ký, bạn sẽ nhận được liên kết đặt lại mật khẩu có hiệu lực trong 60 phút. Vui lòng kiểm tra cả thư mục Spam.
                 </p>
                 <motion.button
                   whileHover={{ scale: 1.02 }}

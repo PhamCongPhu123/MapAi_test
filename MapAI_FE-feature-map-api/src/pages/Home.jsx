@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion'
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
 import { 
   MessageSquare, 
@@ -90,7 +90,6 @@ const FAQItem = ({ question, answer }) => {
 function Home() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const scrollRef = useRef(null)
   const { scrollYProgress } = useScroll()
   
   const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0])
@@ -152,7 +151,7 @@ function Home() {
             <motion.button 
               whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(59, 130, 246, 0.4)" }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/map")}
+              onClick={() => navigate("/offline")}
               className="w-full sm:w-auto px-10 py-4 bg-blue-600 text-white text-sm font-black rounded-xl flex items-center justify-center gap-2 group relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>

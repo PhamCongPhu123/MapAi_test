@@ -138,7 +138,7 @@ const LocationManagement = () => {
       setLoading(true);
       const data = await getAllLocations();
       setLocations(data);
-    } catch (error) {
+    } catch {
       addToast('Failed to load locations', 'error');
     } finally {
       setLoading(false);

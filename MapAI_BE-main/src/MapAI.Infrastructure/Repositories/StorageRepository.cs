@@ -1,5 +1,5 @@
 using System.Net.Http.Headers;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using Microsoft.Extensions.Configuration;
 
 namespace MapAI.Infrastructure.Repositories

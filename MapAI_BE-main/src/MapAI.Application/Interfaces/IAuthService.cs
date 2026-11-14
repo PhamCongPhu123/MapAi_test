@@ -10,6 +10,7 @@ namespace MapAI.Application.Interfaces
         Task LogoutAsync(string userId);
         Task RegisterAsync(RegisterRequest request);
         Task VerifyEmailAsync(string userId, string token);
+        Task ResendVerificationEmailAsync(string email);
         Task<bool> ForgotPasswordAsync(string email);
         Task ResetPasswordAsync(string userId, string token, string newPassword);
         Task<LoginResponse> GoogleLoginAsync(string idToken);

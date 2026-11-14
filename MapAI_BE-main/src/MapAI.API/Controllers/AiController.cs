@@ -1,5 +1,6 @@
 using MapAI.Application.Interfaces;
 using MapAI.Domain.Models.Ai;
+using MapAI.Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MapAI.API.Controllers
@@ -20,17 +21,21 @@ namespace MapAI.API.Controllers
         {
             try 
             {
-                if (string.IsNullOrEmpty(request.UserInput))
+                if (string.IsNullOrWhiteSpace(request.UserInput))
                 {
-                    return BadRequest(new { message = "User input is required." });
+                    return BadRequest(new { code = "AI_INPUT_REQUIRED", message = "Vui lòng nhập tin nhắn cho MapAI." });
                 }
 
                 var result = await _aiService.AskMapAIAsync(request);
                 return Ok(result);
             }
-            catch (Exception ex)
+            catch (AiProviderException ex)
             {
-                return StatusCode(500, new { message = "An error occurred while processing your request with MapAI.", error = ex.Message });
+                return StatusCode(ex.StatusCode, new { code = ex.Code, message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { code = "AI_UNAVAILABLE", message = "MapAI chưa xử lý được yêu cầu này. Vui lòng thử lại sau." });
             }
         }
     }

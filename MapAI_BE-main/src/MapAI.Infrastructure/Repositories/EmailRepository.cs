@@ -1,5 +1,5 @@
 using MailKit.Net.Smtp;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using MapAI.Common.Configs;
 using Microsoft.Extensions.Options;
 using MimeKit;

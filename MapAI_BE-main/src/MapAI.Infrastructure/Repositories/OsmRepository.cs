@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Web;
 using MapAI.Domain.Models.Osm;
 using MapAI.Domain.Models.Foursquare;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using Microsoft.Extensions.Logging;
 
 namespace MapAI.Infrastructure.Repositories
@@ -26,6 +26,36 @@ namespace MapAI.Infrastructure.Repositories
         }
         // ✅ FIXED VERSION - Overpass stable + safe query
 
+        public async Task<List<MapPlaceResult>> SearchCategoryNearbyAsync(double lat, double lng, string category, int radius, CancellationToken cancellationToken = default)
+        {
+            var definition = MapPlaceCategories.Find(category) ?? throw new ArgumentException("Loại địa điểm không được hỗ trợ.");
+            if (!MapDistance.Valid(lat, lng) || radius is < 100 or > 20000) throw new ArgumentException("Tọa độ hoặc bán kính không hợp lệ.");
+            var center = $"{radius},{lat.ToString(CultureInfo.InvariantCulture)},{lng.ToString(CultureInfo.InvariantCulture)}";
+            var filters = string.Join("", definition.Filters.Select(filter => $"nwr{filter}(around:{center});"));
+            // Retrieve every matching POI in the bounded radius before sorting by distance.
+            // A server-side `out ... 20` limit would select arbitrary rows, not the closest 20.
+            var query = $"[out:json][timeout:25];({filters});out body center;";
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            using var body = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("data", query) });
+            using var response = await _httpClient.PostAsync(OverpassBaseUrl, body, timeout.Token);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+            var data = await JsonSerializer.DeserializeAsync<OverpassResponse>(stream, cancellationToken: timeout.Token);
+            if (data?.Elements == null || !string.IsNullOrWhiteSpace(data.Remark)) throw new HttpRequestException("Overpass không trả về danh sách địa điểm đầy đủ.");
+            return data.Elements.Where(e => (e.Lat.HasValue && e.Lon.HasValue) || e.Center != null).Select(e =>
+            {
+                var tags = e.Tags ?? new Dictionary<string, string>();
+                return new MapPlaceResult
+                {
+                    Id = $"osm:{e.Type}:{e.Id}", Source = "openstreetmap", Category = definition.Id,
+                    Name = tags.GetValueOrDefault("name") ?? tags.GetValueOrDefault("brand") ?? $"{definition.Name} (chưa có tên)",
+                    Address = tags.GetValueOrDefault("addr:full") ?? string.Join(" ", new[] { tags.GetValueOrDefault("addr:housenumber"), tags.GetValueOrDefault("addr:street") }.Where(s => !string.IsNullOrWhiteSpace(s))),
+                    Lat = e.Lat ?? e.Center!.Lat, Lng = e.Lon ?? e.Center!.Lon
+                };
+            }).Where(p => MapDistance.Valid(p.Lat, p.Lng)).ToList();
+        }
+
         public async Task<List<FoursquareNearbyResult>> SearchNearbyOverpassAsync(double lat, double lng, string query = "", int radius = 1000)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -37,7 +67,11 @@ namespace MapAI.Infrastructure.Repositories
 
                 string poiSearch;
 
-                if (string.IsNullOrEmpty(safeQuery))
+                if (MapPlaceCategories.FindForBrowse(safeQuery) is { } category)
+                {
+                    poiSearch = string.Join("", category.Filters.Select(filter => $"nwr{filter}(around:{radius},{latStr},{lngStr});"));
+                }
+                else if (string.IsNullOrEmpty(safeQuery))
                 {
                     poiSearch =
                         $"nwr[amenity](around:{radius},{latStr},{lngStr});" +
@@ -68,17 +102,19 @@ namespace MapAI.Infrastructure.Repositories
                 {
                     var errorBody = await response.Content.ReadAsStringAsync();
                     _logger.LogError("[Nearby] Overpass error {Status}: {Body}", (int)response.StatusCode, errorBody);
-                    return new List<FoursquareNearbyResult>();
+                    response.EnsureSuccessStatusCode();
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
                 var data = JsonSerializer.Deserialize<OverpassResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (data?.Elements == null || !string.IsNullOrWhiteSpace(data.Remark)) throw new HttpRequestException("Overpass không trả về danh sách địa điểm đầy đủ.");
 
                 return data?.Elements?
                     .Where(e => e.Lat != null || e.Center != null)
                     .Select(e => new FoursquareNearbyResult
                     {
-                        FsqId = $"osm_{e.Id}",
+                        FsqId = $"osm:{e.Type}:{e.Id}",
+                        Source = "openstreetmap",
                         Name = e.Tags?.GetValueOrDefault("name") ?? "OSM Place",
                         Lat = e.Lat ?? e.Center?.Lat ?? 0,
                         Lng = e.Lon ?? e.Center?.Lon ?? 0,
@@ -89,7 +125,7 @@ namespace MapAI.Infrastructure.Repositories
             {
                 stopwatch.Stop();
                 _logger.LogError(ex, "[Nearby] Overpass Exception");
-                return new List<FoursquareNearbyResult>();
+                throw new HttpRequestException("Nguồn OpenStreetMap đang không khả dụng.", ex);
             }
         }
 
@@ -100,12 +136,16 @@ namespace MapAI.Infrastructure.Repositories
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                string bbox = "15.91,107.81,16.25,108.35";
+                string bbox = DaNangBounds.Overpass;
                 var safeQuery = query?.Replace("\"", "").Trim();
 
                 string poiSearch;
 
-                if (string.IsNullOrEmpty(safeQuery))
+                if (MapPlaceCategories.FindForBrowse(safeQuery) is { } category)
+                {
+                    poiSearch = string.Join("", category.Filters.Select(filter => $"nwr{filter}({bbox});"));
+                }
+                else if (string.IsNullOrEmpty(safeQuery))
                 {
                     poiSearch =
                         $"nwr[amenity]({bbox});" +
@@ -136,17 +176,19 @@ namespace MapAI.Infrastructure.Repositories
                 {
                     var errorBody = await response.Content.ReadAsStringAsync();
                     _logger.LogError("[CityWide] Overpass error {Status}: {Body}", (int)response.StatusCode, errorBody);
-                    return new List<FoursquareNearbyResult>();
+                    response.EnsureSuccessStatusCode();
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
                 var data = JsonSerializer.Deserialize<OverpassResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (data?.Elements == null || !string.IsNullOrWhiteSpace(data.Remark)) throw new HttpRequestException("Overpass không trả về danh sách địa điểm đầy đủ.");
 
                 return data?.Elements?
                     .Where(e => e.Lat != null || e.Center != null)
                     .Select(e => new FoursquareNearbyResult
                     {
-                        FsqId = $"osm_{e.Id}",
+                        FsqId = $"osm:{e.Type}:{e.Id}",
+                        Source = "openstreetmap",
                         Name = e.Tags?.GetValueOrDefault("name") ?? "OSM Place",
                         Lat = e.Lat ?? e.Center?.Lat ?? 0,
                         Lng = e.Lon ?? e.Center?.Lon ?? 0,
@@ -157,7 +199,7 @@ namespace MapAI.Infrastructure.Repositories
             {
                 stopwatch.Stop();
                 _logger.LogError(ex, "[CityWide] Overpass Exception");
-                return new List<FoursquareNearbyResult>();
+                throw new HttpRequestException("Nguồn OpenStreetMap đang không khả dụng.", ex);
             }
         }
         public async Task<List<NominatimResult>?> SearchNominatimAsync(string query)

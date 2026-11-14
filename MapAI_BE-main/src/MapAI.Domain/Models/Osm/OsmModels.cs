@@ -32,6 +32,8 @@ namespace MapAI.Domain.Models.Osm
 
     public class OverpassResponse
     {
+        [JsonPropertyName("remark")]
+        public string? Remark { get; set; }
         [JsonPropertyName("elements")]
         public List<OverpassElement>? Elements { get; set; }
     }

@@ -3,10 +3,10 @@
   <ItemGroup>
     <ProjectReference Include="..\MapAI.Domain\MapAI.Domain.csproj" />
     <ProjectReference Include="..\MapAI.Common\MapAI.Common.csproj" />
-    <ProjectReference Include="..\MapAI.Infrastructure\MapAI.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
   </ItemGroup>
 
@@ -15,17 +15,4 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-	<ItemGroup>
-		<PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
-		<PackageReference Include="Google.Apis.Auth" Version="1.73.0" />
-		<PackageReference Include="MailKit" Version="4.14.1" />
-		<PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.0" />
-		<PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
-		<PackageReference Include="MimeKit" Version="4.14.0" />
-		<PackageReference Include="PdfPig" Version="0.1.12" />
-		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
-		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.*" />
-		<FrameworkReference Include="Microsoft.AspNetCore.App" />
-	</ItemGroup>
-
 </Project>

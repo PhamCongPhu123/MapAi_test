@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { validateEmail, validateName, validatePassword } from "../utils/validators";
+import { canUseGoogleWebLogin } from '../config/platform';
 import { 
   Mail, 
   Lock, 
@@ -33,13 +34,13 @@ export default function Register() {
     setError("");
 
     // Validation
-    if (!validateName(name)) {
+    if (!validateName(name.trim())) {
       setError("Họ tên phải có ít nhất 2 ký tự.");
       addToast("Họ tên không hợp lệ", "error");
       setIsLoading(false);
       return;
     }
-    if (!validateEmail(email)) {
+    if (!validateEmail(email.trim())) {
       setError("Địa chỉ email không hợp lệ.");
       addToast("Email không hợp lệ", "error");
       setIsLoading(false);
@@ -54,17 +55,26 @@ export default function Register() {
 
     try {
       const userData = {
-        fullName: name,
-        email,
+        fullName: name.trim(),
+        email: email.trim(),
         password,
         phoneNumber,
         dateOfBirth: new Date().toISOString(), // Mock, trong thực tế nên có input date
-        role: 0 // 0: User
       };
       await register(userData);
-      addToast("Khởi tạo tài khoản thành công! Vui lòng kiểm tra email để kích hoạt.", "success");
-      navigate("/login");
+      addToast("Đăng ký thành công! Vui lòng xác thực email.", "success");
+      navigate("/login", { state: {
+        registeredEmail: email.trim(), verificationRequired: true,
+        verificationMessage: 'Đăng ký thành công. Hãy mở email xác thực (kiểm tra cả Spam), sau đó đăng nhập. Bạn không cần chờ quản trị viên duyệt.'
+      } });
     } catch (err) {
+      if (err.code === 'VERIFICATION_EMAIL_UNAVAILABLE') {
+        navigate('/login', { state: {
+          registeredEmail: email.trim(), verificationRequired: true,
+          verificationMessage: err.message
+        } });
+        return;
+      }
       const msg = err.message || "Đã có lỗi xảy ra khi đăng ký.";
       setError(msg);
       addToast(msg, "error");
@@ -89,8 +99,8 @@ export default function Register() {
           className="w-full max-w-[430px]"
         >
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">Yêu cầu cấp quyền</h1>
-            <p className="text-slate-500 font-bold text-[11px] uppercase tracking-[0.1em]">Khởi tạo tài khoản hệ thống MapAI</p>
+            <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">Đăng ký MapAI</h1>
+            <p className="text-slate-400 text-sm">Tạo tài khoản và xác thực email để bắt đầu</p>
           </div>
 
           <motion.div 
@@ -100,8 +110,9 @@ export default function Register() {
             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/40 to-transparent"></div>
             
             <form onSubmit={handleSubmit} className="space-y-5">
-              <motion.button
+              {canUseGoogleWebLogin && <motion.button
                 type="button"
+                onClick={() => navigate('/login')}
                 whileHover={{ scale: 1.01, backgroundColor: "#f8fafc" }}
                 whileTap={{ scale: 0.99 }}
                 className="w-full py-3 bg-white text-slate-950 font-black rounded-xl flex items-center justify-center gap-2.5 transition-all text-[12px] shadow-lg shadow-white/5"
@@ -113,7 +124,7 @@ export default function Register() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
                 <span>Đăng ký nhanh với Google</span>
-              </motion.button>
+              </motion.button>}
 
               <div className="relative flex items-center">
                 <div className="flex-grow border-t border-white/5"></div>
@@ -124,6 +135,7 @@ export default function Register() {
               <AnimatePresence>
                 {error && (
                   <motion.div 
+                    role="alert"
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
@@ -139,6 +151,8 @@ export default function Register() {
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                   <input
                     type="text"
+                    autoComplete="name"
+                    aria-label="Họ và tên"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -151,6 +165,10 @@ export default function Register() {
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                   <input
                     type="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    inputMode="email"
+                    aria-label="Email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -163,6 +181,8 @@ export default function Register() {
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                   <input
                     type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    aria-label="Mật khẩu"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}

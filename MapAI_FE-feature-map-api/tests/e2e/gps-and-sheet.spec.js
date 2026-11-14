@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('Offline GPS, out-of-area fallback, sheet dragging and keyboard access work', async ({ page, context }) => {
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ latitude: 16.0611, longitude: 108.2266 });
-  await page.goto('/map');
+  await page.goto('/offline');
   await expect(page.getByRole('heading', { name: '28 địa điểm đang chờ bạn' })).toBeVisible();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await context.setOffline(true);

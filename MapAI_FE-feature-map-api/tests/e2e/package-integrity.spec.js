@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.use({ serviceWorkers: 'block' });
 test('A corrupt update is rejected atomically, keeping the previous offline package usable', async ({ page }) => {
-  await page.goto('/map');
+  await page.goto('/offline');
   await expect(page.getByRole('heading', { name: '28 địa điểm đang chờ bạn' })).toBeVisible();
   await page.route('**/offline/roads.json', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
   await page.getByRole('button', { name: 'Quản lý dữ liệu offline', exact: true }).click();

@@ -1,44 +1,44 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { authApi } from '../services/authService';
-import { useToast } from '../hooks/useToast';
 import { CheckCircle, XCircle, Loader2, ArrowRight } from 'lucide-react';
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
-  const { addToast } = useToast();
-  const [status, setStatus] = useState('loading'); // loading, success, error
-  const [message, setMessage] = useState('');
+  const userId = searchParams.get('userId');
+  // Restore '+' in links from older backends which did not URL-encode Base64.
+  const token = searchParams.get('token')?.replace(/ /g, '+');
+  const key = JSON.stringify([userId, token]);
+  const [outcome, setOutcome] = useState(null);
+  const verification = useRef(null);
+  const hasLink = Boolean(userId && token);
+  const status = !hasLink ? 'error' : outcome?.key === key ? outcome.status : 'loading';
+  const message = !hasLink ? 'Liên kết xác thực không hợp lệ. Vui lòng kiểm tra lại email.'
+    : outcome?.key === key ? outcome.message : '';
 
   useEffect(() => {
+    if (!userId || !token) return;
+    let cancelled = false;
     const verify = async () => {
-      const userId = searchParams.get('userId');
-      const token = searchParams.get('token');
-
-      if (!userId || !token) {
-        setStatus('error');
-        setMessage('Liên kết xác thực không hợp lệ hoặc đã hết hạn.');
-        return;
-      }
-
-      // Restore Base64 '+' characters: Browser decodes '+' in URL to space ' '
-      const fixedToken = token.replace(/ /g, '+');
-
       try {
-        await authApi.verifyEmail(userId, fixedToken);
-        setStatus('success');
-        setMessage('Tài khoản của bạn đã được kích hoạt thành công! Giờ đây bạn có thể đăng nhập vào hệ thống.');
-        addToast('Xác thực email thành công!', 'success');
+        // StrictMode replays effects in development. Reuse the same request so
+        // a verification link is not submitted twice by this component.
+        if (verification.current?.key !== key) {
+          verification.current = { key, promise: authApi.verifyEmail(userId, token) };
+        }
+        await verification.current.promise;
+        if (cancelled) return;
+        setOutcome({ key, status: 'success', message: 'Email đã được xác thực thành công! Bạn có thể đăng nhập ngay.' });
       } catch (error) {
-        setStatus('error');
-        setMessage(error.message || 'Đã có lỗi xảy ra trong quá trình xác thực.');
-        addToast(error.message || 'Xác thực thất bại', 'error');
+        if (cancelled) return;
+        setOutcome({ key, status: 'error', message: error.message || 'Đã có lỗi xảy ra trong quá trình xác thực.' });
       }
     };
 
     verify();
-  }, [searchParams, addToast]);
+    return () => { cancelled = true; };
+  }, [userId, token, key]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col items-center justify-center p-4 selection:bg-blue-500/30">
@@ -79,23 +79,25 @@ export default function VerifyEmail() {
           {status === 'error' && 'Xác thực thất bại'}
         </h1>
 
-        <p className="text-slate-400 font-medium leading-relaxed mb-8">
+        <p role={status === 'error' ? 'alert' : 'status'} className="text-slate-400 font-medium leading-relaxed mb-8">
           {message || 'Vui lòng đợi trong giây lát khi chúng tôi xử lý yêu cầu của bạn...'}
         </p>
 
         {status !== 'loading' && (
-          <motion.div
+          <motion.div className="space-y-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
           >
             <Link 
               to="/login"
+              state={status === 'success' ? { verificationMessage: 'Email đã được xác thực thành công. Bạn có thể đăng nhập.' } : undefined}
               className="inline-flex items-center gap-2 px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow-xl shadow-blue-600/20 transition-all text-[13px] uppercase tracking-wider"
             >
               <span>Đi đến Đăng nhập</span>
               <ArrowRight size={16} />
             </Link>
+            {status === 'error' && <p className="text-sm text-slate-400">Bạn có thể gửi lại email xác thực từ trang đăng nhập.</p>}
           </motion.div>
         )}
 

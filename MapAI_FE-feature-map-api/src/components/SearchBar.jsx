@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast';
 import { searchLocations } from '../services/mapServices';
+import { communityApi } from '../services/communityService';
 
 const SearchBar = () => {
   const [query, setQuery] = useState('');
@@ -32,8 +33,14 @@ const SearchBar = () => {
 
     setIsLoading(true);
     try {
-      const data = await searchLocations(text);
-      setResults(data);
+      const [local, external] = await Promise.allSettled([communityApi.search(text), searchLocations(text)]);
+      if (local.status === 'rejected' && external.status === 'rejected') throw local.reason;
+      const localPlaces = local.status === 'fulfilled' ? local.value.map(place => ({
+        id: place.id, display_name: place.title, lat: place.latitude, lon: place.longitude,
+        type: 'MapAI', address: { city: place.address || 'Đà Nẵng' },
+      })) : [];
+      const externalPlaces = external.status === 'fulfilled' ? external.value : [];
+      setResults([...localPlaces, ...externalPlaces]);
       setShowResults(true);
     } catch (_error) {
       console.error('Search error:', _error);
@@ -57,11 +64,11 @@ const SearchBar = () => {
     setShowResults(false);
     
     // Đẩy lên URL dưới dạng map?lat=?&lng=?
-    navigate(`/map/online?lat=${lat}&lng=${lon}`);
+    navigate(`/map?${result.id ? `placeId=${encodeURIComponent(result.id)}&` : ""}lat=${lat}&lng=${lon}`);
   };
 
   return (
-    <div ref={searchRef} className="relative w-[410px] z-20">
+    <div ref={searchRef} className="relative min-w-0 flex-1 md:flex-none w-full md:w-[410px] z-20">
       <div className="relative flex items-center group">
         <div className="absolute left-4 p-1 text-white/40 group-focus-within:text-blue-400 transition-colors z-10">
           {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}

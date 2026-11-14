@@ -1,7 +1,9 @@
 using MapAI.Application.Interfaces;
+using MapAI.Application.Exceptions;
 using MapAI.Domain.Models.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace MapAI.API.Controllers
@@ -11,10 +13,12 @@ namespace MapAI.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IAuthService authService)
+        public AuthController(IAuthService authService, ILogger<AuthController> logger)
         {
             _authService = authService;
+            _logger = logger;
         }
 
         [HttpPost("login")]
@@ -27,7 +31,7 @@ namespace MapAI.API.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return AuthFailure(ex, "Không thể đăng nhập lúc này. Vui lòng thử lại sau.");
             }
         }
 
@@ -39,9 +43,9 @@ namespace MapAI.API.Controllers
                 var result = await _authService.RefreshAsync(request);
                 return Ok(result);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return Unauthorized(new { message = ex.Message });
+                return Unauthorized(new { code = "SESSION_EXPIRED", message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." });
             }
         }
 
@@ -69,11 +73,11 @@ namespace MapAI.API.Controllers
             try
             {
                 await _authService.RegisterAsync(request);
-                return Ok(new { message = "Registration successful. Please check your email to verify your account." });
+                return Ok(new { requiresEmailVerification = true, message = "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản; không cần quản trị viên duyệt." });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return AuthFailure(ex, "Không thể đăng ký lúc này. Vui lòng thử lại sau.");
             }
         }
 
@@ -83,25 +87,41 @@ namespace MapAI.API.Controllers
             try
             {
                 await _authService.VerifyEmailAsync(userId, token);
-                return Ok(new { message = "Email verified successfully. You can now log in." });
+                return Ok(new { message = "Xác thực email thành công. Bạn có thể đăng nhập ngay." });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return AuthFailure(ex, "Không thể xác thực email lúc này. Vui lòng thử lại sau.");
+            }
+        }
+
+        [HttpPost("resend-verification")]
+        public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request)
+        {
+            try
+            {
+                await _authService.ResendVerificationEmailAsync(request.Email);
+                return Ok(new { message = "Nếu email này đang chờ xác thực, một liên kết mới đã được gửi. Vui lòng kiểm tra cả thư mục Spam. Liên kết có hiệu lực 5 phút." });
+            }
+            catch (Exception ex)
+            {
+                return AuthFailure(ex, "Không thể gửi email xác thực lúc này. Vui lòng thử lại sau.");
             }
         }
 
         [HttpPost("forgot-password")]
+        [EnableRateLimiting("password-recovery")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
         {
             try
             {
                 await _authService.ForgotPasswordAsync(request.Email);
-                return Ok(new { message = "Please check your email to reset your password." });
+                return Ok(new { message = "Nếu email đã được đăng ký, bạn sẽ nhận được liên kết đặt lại mật khẩu. Vui lòng kiểm tra cả thư mục Spam." });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                _logger.LogError(ex, "Could not send password recovery email");
+                return StatusCode(503, new { message = "Chưa thể gửi email khôi phục. Vui lòng thử lại sau." });
             }
         }
 
@@ -113,9 +133,14 @@ namespace MapAI.API.Controllers
                 await _authService.ResetPasswordAsync(request.UserId, request.Token, request.NewPassword);
                 return Ok(new { message = "Password updated successfully." });
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
                 return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not reset password");
+                return StatusCode(503, new { message = "Chưa thể đặt lại mật khẩu. Vui lòng thử lại sau." });
             }
         }
 
@@ -129,7 +154,7 @@ namespace MapAI.API.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = "Google login failed.", error = ex.Message });
+                return AuthFailure(ex, "Đăng nhập Google thất bại. Vui lòng thử lại hoặc đăng nhập bằng email.");
             }
         }
 
@@ -152,6 +177,15 @@ namespace MapAI.API.Controllers
             {
                 return StatusCode(500, new { message = "An error occurred while retrieving your information.", error = ex.Message });
             }
+        }
+
+        private IActionResult AuthFailure(Exception exception, string fallback)
+        {
+            if (exception is AuthException failure)
+                return StatusCode(failure.StatusCode, new { code = failure.Code, message = failure.Message });
+
+            _logger.LogError("Authentication request failed ({FailureType}).", exception.GetType().Name);
+            return StatusCode(500, new { code = "AUTH_UNAVAILABLE", message = fallback });
         }
     }
 }

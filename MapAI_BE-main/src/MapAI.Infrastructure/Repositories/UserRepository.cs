@@ -1,4 +1,5 @@
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Infrastructure.Persistence;
+using MapAI.Domain.Ports;
 using MapAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,7 +21,8 @@ namespace MapAI.Infrastructure.Repositories
 
         public async Task<UserEntity?> GetByEmailAsync(string email)
         {
-            return await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var normalized = email.Trim().ToLowerInvariant();
+            return await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalized);
         }
 
         public async Task<UserEntity?> GetByIdOrEmailAsync(string search)

@@ -1,6 +1,8 @@
 # MapAI Offline — triển khai và trình diễn
 
-Luồng khám phá offline mở tại **`/map`** hoặc **`/offline`**, không cần đăng nhập, API key hay backend. Bản đồ online cũ ở **`/map/online`**, giữ nguyên xác thực. Các trang quản trị, hồ sơ và tài khoản vẫn là tính năng online; không cache phản hồi API có thông tin tài khoản.
+Luồng khám phá offline mở tại **`/offline`**, không cần đăng nhập, API key hay backend. **`/map`** (alias `/map/online`) mở bản online khi có mạng và tự hiện bản offline khi mất mạng. Các trang quản trị, hồ sơ và tài khoản vẫn là tính năng online; không cache phản hồi API có thông tin tài khoản.
+
+Android/iOS đóng gói dữ liệu sẵn trong ứng dụng, dùng được ngay lần mở đầu khi mất mạng. Xem [hướng dẫn Capacitor](../MOBILE.md) và [Clean Architecture 3 lớp](../../ARCHITECTURE.md). Phần PWA bên dưới áp dụng cho trình duyệt.
 
 ## Chạy thử đúng bản PWA
 
@@ -12,7 +14,7 @@ npm run build
 npm run preview -- --host 0.0.0.0
 ```
 
-Mở `/map` trên trình duyệt, chờ huy hiệu **Online • Đà Nẵng sẵn sàng**. Lần đầu phải có mạng để lưu giao diện và gói dữ liệu; sau đó có thể tải lại trang và mở tab mới khi mất mạng. Nút **Giả lập Offline** nằm trong cửa sổ mở bằng huy hiệu trạng thái hoặc nút dữ liệu. Giả lập áp dụng cho luồng khám phá cục bộ; kiểm chứng PWA bằng DevTools → Network → Offline hoặc ngắt mạng thật.
+Mở `/offline` trên trình duyệt, chờ huy hiệu **Online • Đà Nẵng sẵn sàng**. Lần đầu phải có mạng để lưu giao diện và gói dữ liệu; sau đó có thể tải lại trang và mở tab mới khi mất mạng. Nút **Giả lập Offline** nằm trong cửa sổ mở bằng huy hiệu trạng thái hoặc nút dữ liệu. Giả lập áp dụng cho luồng khám phá cục bộ; kiểm chứng PWA bằng DevTools → Network → Offline hoặc ngắt mạng thật.
 
 `npm run dev` dùng để sửa giao diện, **không bật Service Worker**. Muốn demo mở lại trang offline phải dùng bản build/preview hoặc bản triển khai qua **HTTPS**. Trình duyệt cho phép Service Worker trên localhost; truy cập IP LAN qua HTTP thường không được. Nếu dùng điện thoại, triển khai HTTPS rồi mở online một lần trên chính điện thoại đó. Dữ liệu không tự chuyển giữa thiết bị/trình duyệt.
 
@@ -52,14 +54,14 @@ Nếu từng cài phiên bản cũ, mở cửa sổ dữ liệu và chọn **C�
 npm test
 npm run lint:offline
 npm run build
-npm run test:e2e
+npm run test:e2e:offline
 ```
 
 Unit tests kiểm tra tìm kiếm, nhận diện nhu cầu, làm rõ khu vực, A* so với một thuật toán tham chiếu độc lập, đường một chiều, ngoài vùng, graph đứt đoạn, SHA-256, đọc PMTiles và **224 cặp tuyến** từ 4 mốc tới 28 địa điểm với 2 phương tiện. Browser tests chạy bản production có Service Worker trên viewport desktop/mobile: offline thật, tải lại/mở tab, lưu yêu thích/lịch sử, AI, chọn điểm xuất phát, chỉ đường, trạng thái trống, giả lập, xóa/cài lại và cập nhật lỗi không phá gói cũ.
 
 Playwright mặc định dùng Chromium tại `/usr/bin/chromium`. Nếu máy khác, đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE` tới trình duyệt đã cài. Test chỉ dùng server preview cục bộ, không cần backend. Test gói lỗi chặn Service Worker có chủ đích để chủ động trả một file sai checksum; các test offline thật vẫn bật Service Worker.
 
-Lệnh lint toàn dự án còn lỗi có sẵn ở các màn hình online; `lint:offline` kiểm tra riêng toàn bộ phần offline mới. Không tắt các quy tắc hoặc sửa logic online ngoài phạm vi để làm báo cáo xanh.
+`npm run lint` kiểm tra toàn dự án; hiện còn 4 cảnh báo dependency useEffect ở phần online. `lint:offline` kiểm tra riêng phần offline.
 
 ## Nguồn và cách tái tạo dữ liệu
 

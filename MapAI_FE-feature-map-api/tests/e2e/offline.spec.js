@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 async function ready(page) {
-  await page.goto('/map');
+  await page.goto('/offline');
   await expect(page.getByRole('heading', { name: '28 địa điểm đang chờ bạn' })).toBeVisible();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await expect(page.getByRole('button', { name: 'Xem Cầu Rồng', exact: true })).toBeVisible();

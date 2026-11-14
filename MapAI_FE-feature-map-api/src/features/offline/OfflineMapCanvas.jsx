@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import { PMTiles, Protocol, FileSource } from 'pmtiles';
-import { db } from '../../offline/db';
-import { CENTER, CATEGORIES, LANDMARKS } from '../../offline/constants';
+import { offlineService } from '../../offline/compositionRoot';
+import { CENTER, CATEGORIES, LANDMARKS } from '../../offline/application/constants';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const protocol = new Protocol();
 maplibregl.addProtocol('pmtiles', protocol.tile);
 maplibregl.addProtocol('localglyph', async ({ url }) => {
   const path = decodeURIComponent(url.slice('localglyph://'.length));
-  const asset = await db.assets.get(path);
+  const asset = await offlineService.readAsset(path);
   return { data: asset ? await asset.blob.arrayBuffer() : new ArrayBuffer(0) };
 });
 const empty = { type: 'FeatureCollection', features: [] };

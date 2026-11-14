@@ -9,11 +9,18 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-native
 dist-ssr
+test-results/
+test-results-offline/
+test-results-native/
+playwright-report/
 *.local
 .env
 .env.*
 !.env.example
+!.env.mobile.example
+!.env.mobile-development.example
 
 # Editor directories and files
 .vscode/*

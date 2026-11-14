@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { PMTiles, FileSource } from 'pmtiles';
-import { RoutingEngine } from '../../src/offline/routingEngine.js';
-import { createSearchEngine, normalize, distanceMeters, inBounds } from '../../src/offline/searchEngine.js';
-import { askLocalAssistant, AREA_CHOICES } from '../../src/offline/localAiAgent.js';
-import { LANDMARKS } from '../../src/offline/constants.js';
+import { RoutingEngine } from '../../src/offline/application/routingEngine.js';
+import { createSearchEngine, normalize, distanceMeters, inBounds } from '../../src/offline/application/searchEngine.js';
+import { askLocalAssistant, AREA_CHOICES } from '../../src/offline/application/localAiAgent.js';
+import { LANDMARKS } from '../../src/offline/application/constants.js';
 
 const root = new URL('../../public/offline/', import.meta.url);
 const read = file => JSON.parse(fs.readFileSync(new URL(file, root)));

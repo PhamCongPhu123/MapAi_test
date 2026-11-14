@@ -3,17 +3,20 @@ import { authApi } from "../services/authService";
 import { userApi } from "../services/userService";
 import { clearTokens, decodeToken } from "../services/api";
 import { AuthContext } from "./authContext";
-import { isOffline } from '../offline/network';
+import { isOffline, useNetworkStatus } from '../offline/network';
+import { isNative } from '../config/platform';
 
 export const AuthProvider = ({ children }) => {
+  const { offline } = useNetworkStatus();
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     const initAuth = async () => {
       const accessToken = localStorage.getItem("accessToken");
       // Public local exploration must not call auth APIs or discard tokens while offline.
-      if (isOffline()) { setIsLoading(false); return; }
+      if (isOffline() || (isNative && !import.meta.env.VITE_API_BASE_URL?.trim())) { setIsLoading(false); return; }
       if (accessToken) {
         try {
           const decoded = decodeToken(accessToken);
@@ -21,28 +24,33 @@ export const AuthProvider = ({ children }) => {
             // Lấy thông tin cơ bản từ /auth/me khi khởi tạo
             const userData = await authApi.getMe();
             console.log("BE User Data (initAuth):", userData);
-            setUser(userData);
+            if (!cancelled) setUser(userData);
           } else {
             clearTokens();
           }
         } catch (e) {
           console.error("Khởi tạo auth thất bại:", e);
-          clearTokens();
+          if (!cancelled && !isOffline() && !(e instanceof TypeError)) clearTokens();
         }
       }
-      setIsLoading(false);
+      if (!cancelled) setIsLoading(false);
     };
 
     initAuth();
-  }, []);
+    return () => { cancelled = true; };
+  }, [offline]);
 
   const login = useCallback(async (email, password) => {
     await authApi.login({ email, password });
-    // Dùng /auth/me ngay sau khi login
-    const userData = await authApi.getMe();
-    console.log("BE User Data (login):", userData);
-    setUser(userData);
-    return userData;
+    try {
+      const userData = await authApi.getMe();
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      clearTokens();
+      setUser(null);
+      throw error;
+    }
   }, []);
 
   const register = useCallback(async (userData) => {
@@ -76,7 +84,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const resetPassword = useCallback(async (data) => {
-    return await authApi.resetPassword(data);
+    const result = await authApi.resetPassword(data);
+    clearTokens();
+    setUser(null);
+    return result;
   }, []);
 
   const refreshUser = useCallback(async () => {

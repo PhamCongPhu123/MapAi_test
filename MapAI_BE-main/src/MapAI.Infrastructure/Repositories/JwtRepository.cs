@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using MapAI.Domain.Entities;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -23,6 +23,7 @@ namespace MapAI.Infrastructure.Repositories
             var claims = new List<Claim>
             {
                 new Claim("id", user.Id),
+                new Claim("credential_version", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(user.PasswordHash)))),
                 new Claim(ClaimTypes.Email, user.Email),
                 new Claim(ClaimTypes.Role, user.Role.ToString())
             };

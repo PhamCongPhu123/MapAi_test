@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:7028/api/v1';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL?.trim() || 'https://localhost:7028/api/v1').replace(/\/+$/, '');
 
 /**
  * Hàm hỗ trợ lấy token từ localStorage

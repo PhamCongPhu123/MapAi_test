@@ -1,4 +1,4 @@
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using MapAI.Application.Interfaces;
 using MapAI.Domain.Entities;
 using MapAI.Domain.Enums;

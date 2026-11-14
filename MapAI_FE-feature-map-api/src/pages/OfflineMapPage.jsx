@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Clock3, Coffee, Database, Heart, LocateFixed, MapPin, Navigation, Search, Sparkles, Ticket, Utensils, Wifi, WifiOff, X } from 'lucide-react';
-import { useOfflineData } from '../offline/useOfflineData';
+import { useOfflineData } from '../offline/presentation/useOfflineData';
 import { useNetworkStatus } from '../offline/network';
 import { usePwaStatus } from '../offline/pwa';
-import { useCompactLayout } from '../offline/useCompactLayout';
-import { CATEGORIES, CENTER, DISTRICTS, categoryLabel } from '../offline/constants';
-import { createSearchEngine, distanceMeters, inBounds } from '../offline/searchEngine';
-import { recordVisit, rememberRoute, toggleFavorite } from '../offline/db';
+import { useCompactLayout } from '../offline/presentation/useCompactLayout';
+import { CATEGORIES, CENTER, DISTRICTS, categoryLabel } from '../offline/application/constants';
+import { createSearchEngine, distanceMeters, inBounds } from '../offline/application/searchEngine';
+import { offlineService } from '../offline/compositionRoot';
+const { recordVisit, toggleFavorite } = offlineService;
 import OfflineMapCanvas from '../features/offline/OfflineMapCanvas';
 import PlaceCard, { PlaceImage } from '../features/offline/PlaceCard';
 import AdaptiveBottomSheet from '../features/offline/AdaptiveBottomSheet';
@@ -42,10 +43,8 @@ export default function OfflineMapPage() {
   const [routeError, setRouteError] = useState('');
   const [notice, setNotice] = useState('');
   const mapApi = useRef(null);
-  const worker = useRef(null);
   const routeId = useRef(0);
   const gpsId = useRef(0);
-  const graphSent = useRef(false);
 
   const search = useMemo(() => createSearchEngine(data?.places || []), [data]);
   const results = useMemo(() => {
@@ -64,22 +63,20 @@ export default function OfflineMapPage() {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  useEffect(() => {
-    const instance = new Worker(new URL('../offline/routing.worker.js', import.meta.url), { type: 'module' });
-    worker.current = instance;
-    graphSent.current = false;
-    instance.onmessage = ({ data: reply }) => {
-      if (reply.id !== routeId.current) return;
-      setRouteBusy(false);
-      if (reply.error) { setRouteError(reply.error); return; }
-      setRoute(reply.route); setSheetSize(1);
-      rememberRoute(reply.route).catch(() => setNotice('Đã tính đường, nhưng không lưu được tuyến gần nhất do bộ nhớ thiết bị.'));
-    };
-    instance.onerror = () => { setRouteBusy(false); setRouteError('Không khởi chạy được bộ tính đường. Hãy tải lại trang và thử lại.'); };
-    return () => { instance.terminate(); worker.current = null; };
-  }, [data]);
-
   const cancelPendingRoute = useCallback(() => { routeId.current++; setRouteBusy(false); setRoute(null); setRouteError(''); }, []);
+  useEffect(() => {
+    const onBack = event => {
+      if (dataOpen) setDataOpen(false);
+      else if (compact && assistantOpen) setAssistantOpen(false);
+      else if (pickingOrigin) setPickingOrigin(false);
+      else if (directionsOpen) { setDirectionsOpen(false); cancelPendingRoute(); }
+      else if (selected) { setSelected(null); cancelPendingRoute(); }
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener('mapai:back', onBack);
+    return () => window.removeEventListener('mapai:back', onBack);
+  }, [dataOpen, compact, assistantOpen, pickingOrigin, directionsOpen, selected, cancelPendingRoute]);
   const flyTo = useCallback(place => {
     mapApi.current?.flyTo({ center: [place.lng, place.lat], zoom: 15.2,
       offset: compact ? [0, -75] : [-150, 0], duration: 650 });
@@ -112,10 +109,9 @@ export default function OfflineMapPage() {
   };
   const requestGps = () => {
     const report = message => { setRouteError(message); if (!directionsOpen) setNotice(message); };
-    if (!navigator.geolocation) { report('Thiết bị không có định vị. Hãy chọn mốc hoặc chạm bản đồ.'); return; }
     const id = ++gpsId.current;
     setGpsBusy(true); setRouteError('');
-    navigator.geolocation.getCurrentPosition(position => {
+    offlineService.getLocation().then(position => {
       if (id !== gpsId.current) return;
       setGpsBusy(false);
       const point = { lng: position.coords.longitude, lat: position.coords.latitude, gps: true, name: 'Vị trí GPS của bạn' };
@@ -128,18 +124,22 @@ export default function OfflineMapPage() {
     }, () => {
       if (id !== gpsId.current) return;
       setGpsBusy(false); report('Không lấy được GPS. Chọn Cầu Rồng, Sân bay, Ga Đà Nẵng, Biển Mỹ Khê hoặc chạm bản đồ.');
-    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+    });
   };
   const startDirections = () => {
     cancelPendingRoute(); setDirectionsOpen(true); setSheetSize(1);
     if (!origin) requestGps();
   };
-  const calculate = () => {
-    if (!data || !origin || !selected || !worker.current) return;
+  const calculate = async () => {
+    if (!data || !origin || !selected) return;
     setRoute(null); setRouteBusy(true); setRouteError('');
     const id = ++routeId.current;
-    worker.current.postMessage({ id, graph: graphSent.current ? undefined : data.graph, origin, destination: selected, mode });
-    graphSent.current = true;
+    try {
+      const result = await offlineService.calculateRoute(origin, selected, mode);
+      if (id !== routeId.current) return;
+      setRoute(result); setSheetSize(1);
+    } catch (e) { if (id === routeId.current) setRouteError(e.message); }
+    finally { if (id === routeId.current) setRouteBusy(false); }
   };
   const closeData = useCallback(() => setDataOpen(false), []);
   const closeAssistant = useCallback(() => setAssistantOpen(false), []);

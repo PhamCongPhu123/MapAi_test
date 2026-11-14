@@ -27,14 +27,14 @@ export const getAllLocations = async () => {
       lat: loc.latitude,
       lng: loc.longitude,
       image: loc.thumbnail,
-      rating: loc.rating,
+      rating: loc.communityReviewCount > 0 ? loc.communityRating : loc.rating,
       type: loc.category,
       phone: loc.phoneNumber,
       tags: typeof loc.tags === 'string' 
         ? loc.tags.replace(/[{}]/g, '').split(',') 
         : (Array.isArray(loc.tags) ? loc.tags : []),
       distance: "Đang tính...",
-      isFeatured: loc.rating >= 4.7
+      isFeatured: (loc.communityReviewCount > 0 ? loc.communityRating : loc.rating) >= 4.7
     }));
   } catch (error) {
     console.error("Error in getAllLocations:", error);
@@ -78,6 +78,6 @@ export const searchLocation = async (title, coordinates) => {
     };
   } catch (error) {
     console.error(`Error in searchLocation for ${title}:`, error);
-    return null;
+    throw error;
   }
 };

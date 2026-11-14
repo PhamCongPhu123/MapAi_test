@@ -11,11 +11,13 @@ import '@fontsource/plus-jakarta-sans/vietnamese-600.css'
 import '@fontsource/plus-jakarta-sans/vietnamese-700.css'
 import './offline/pwa'
 import './index.css'
+import NativeAppBridge from './components/NativeAppBridge.jsx'
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
       <BrowserRouter>
+        <NativeAppBridge />
         <ToastProvider>
           <AuthProvider>
             <App />

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 const AdminLayout = () => {
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
@@ -26,13 +26,15 @@ const AdminLayout = () => {
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Manage Users', path: '/admin/users', icon: Users },
     { name: 'Manage Locations', path: '/admin/locations', icon: MapPin },
+    { name: 'Duyệt địa điểm', path: '/admin/contributions', icon: ShieldCheck },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex overflow-hidden">
+    <div className="admin-layout min-h-dvh bg-slate-950 text-slate-100 flex overflow-hidden">
+      {isSidebarOpen && <button aria-label="Đóng menu quản trị" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/60 lg:hidden" />}
       {/* Sidebar */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 transition-transform duration-300 transform ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-slate-900 border-r border-slate-800 transition-transform duration-300 transform ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:relative lg:translate-x-0`}
       >
@@ -49,6 +51,7 @@ const AdminLayout = () => {
               <NavLink
                 key={item.path}
                 to={item.path}
+                onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 group ${
                     isActive 
@@ -92,10 +95,11 @@ const AdminLayout = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-screen">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-[calc(100dvh-var(--safe-top)-var(--safe-bottom))]">
         {/* Header Mobile */}
         <header className="lg:hidden h-16 bg-slate-900 border-b border-slate-800 flex items-center px-4 shrink-0">
           <button 
+            aria-label={isSidebarOpen ? 'Đóng menu quản trị' : 'Mở menu quản trị'}
             onClick={() => setSidebarOpen(!isSidebarOpen)}
             className="p-2 text-slate-400 hover:text-slate-200"
           >

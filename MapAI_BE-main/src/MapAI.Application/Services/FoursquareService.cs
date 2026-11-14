@@ -1,6 +1,6 @@
 using MapAI.Application.Interfaces;
 using MapAI.Domain.Models.Foursquare;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 
 namespace MapAI.Application.Services
 {

@@ -4,6 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { GoogleLogin } from "@react-oauth/google";
+import { canUseGoogleWebLogin } from '../config/platform';
+import { authApi } from '../services/authService';
+import { validateEmail } from '../utils/validators';
 import { 
   Mail, 
   Lock, 
@@ -16,28 +19,36 @@ import {
 } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  const location = useLocation();
+  const [email, setEmail] = useState(location.state?.registeredEmail || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [canResend, setCanResend] = useState(Boolean(location.state?.verificationRequired));
+  const [isSending, setIsSending] = useState(false);
+  const [notice, setNotice] = useState(location.state?.verificationMessage || '');
   
   const { login, googleLogin } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Get the page user was trying to access before being redirected to login
-  const from = location.state?.from?.pathname || "/";
+  const requestedLocation = location.state?.from;
+  const from = requestedLocation
+    ? `${requestedLocation.pathname}${requestedLocation.search || ''}${requestedLocation.hash || ''}`
+    : '/';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setNotice("");
+    setCanResend(false);
 
     try {
-      const userData = await login(email, password);
+      const userData = await login(email.trim(), password);
       addToast("Đăng nhập hệ thống thành công!", "success");
       
       // Redirect to admin dashboard if role is Admin
@@ -50,9 +61,28 @@ export default function Login() {
     } catch (err) {
       const msg = err.message || "Đã có lỗi xảy ra khi đăng nhập.";
       setError(msg);
+      setCanResend(err.code === 'EMAIL_NOT_VERIFIED');
       addToast(msg, "error");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!validateEmail(email.trim())) {
+      setError('Vui lòng nhập địa chỉ email hợp lệ.');
+      return;
+    }
+    setIsSending(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await authApi.resendVerification(email);
+      setNotice(result.message);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -99,8 +129,8 @@ export default function Login() {
           className="w-full max-w-[430px]"
         >
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">Xác thực quyền truy cập</h1>
-            <p className="text-slate-500 font-bold text-[11px] uppercase tracking-[0.1em]">Hệ thống bản đồ Neural Mapping v2.0</p>
+            <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">Đăng nhập MapAI</h1>
+            <p className="text-slate-400 text-sm">Đăng nhập bằng tài khoản của bạn</p>
           </div>
 
           <motion.div 
@@ -111,17 +141,17 @@ export default function Login() {
             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/40 to-transparent"></div>
             
             <div className="space-y-5">
-              <div className="flex justify-center w-full">
+              {canUseGoogleWebLogin && <div className="flex justify-center w-full overflow-hidden">
                 <GoogleLogin
                   onSuccess={handleGoogleSuccess}
                   onError={handleGoogleError}
                   useOneTap
                   use_fedcm_for_prompt={false}
                   theme="filled_blue"
-                  width="350px"
+                  width="280px"
                  shape="pill"
                 />
-              </div>
+              </div>}
 
               <div className="relative flex items-center">
                 <div className="flex-grow border-t border-white/5"></div>
@@ -132,6 +162,7 @@ export default function Login() {
               <AnimatePresence>
                 {error && (
                   <motion.div 
+                    role="alert"
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
@@ -142,12 +173,18 @@ export default function Login() {
                 )}
               </AnimatePresence>
 
+              {notice && <p role="status" className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-200">{notice}</p>}
+
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-3.5">
                   <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                     <input
-                      type="text"
+                      type="email"
+                      aria-label="Email"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      inputMode="email"
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -160,6 +197,8 @@ export default function Login() {
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors w-4 h-4" />
                     <input
                       type={showPassword ? "text" : "password"}
+                      aria-label="Mật khẩu"
+                      autoComplete="current-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -189,14 +228,14 @@ export default function Login() {
                   <button 
                     type="button"
                     onClick={() => navigate("/forgot-password")}
-                    className="text-[10px] font-black text-blue-500 hover:text-blue-400 flex items-center gap-1"
+                    className="min-h-11 text-xs font-bold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1.5"
                   >
                     <ShieldCheck size={10} /> Quên mật khẩu?
                   </button>
                 </div>
 
                 <motion.button
-                  disabled={isLoading}
+                  disabled={isLoading || isSending}
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
                   className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow-xl shadow-blue-600/20 transition-all flex justify-center items-center gap-2 disabled:opacity-70 text-[13px]"
@@ -205,12 +244,22 @@ export default function Login() {
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   ) : (
                     <>
-                      <span>Truy cập Neural Map</span>
+                      <span>Đăng nhập</span>
                       <ArrowRight size={14} />
                     </> 
                   )}
                 </motion.button>
               </form>
+
+              {canResend && (
+                <div className="space-y-3 rounded-xl border border-white/10 p-3 text-sm text-slate-300">
+                  <p>Mở email xác thực và kiểm tra cả thư mục Spam. Tài khoản không cần quản trị viên duyệt.</p>
+                  <button type="button" onClick={handleResend} disabled={isSending || isLoading}
+                    className="text-blue-400 font-bold hover:text-blue-300 disabled:opacity-50">
+                    {isSending ? 'Đang gửi email...' : 'Gửi lại email xác thực'}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="mt-7 text-center pt-5 border-t border-white/5">
@@ -220,7 +269,7 @@ export default function Login() {
                   onClick={() => navigate("/register")} 
                   className="text-white ml-2 hover:text-blue-500 font-black transition-colors"
                 >
-                  Yêu cầu cấp quyền
+                  Đăng ký
                 </button>
               </p>
             </div>

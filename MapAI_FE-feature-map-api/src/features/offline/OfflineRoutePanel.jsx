@@ -1,6 +1,6 @@
 import { LocateFixed, MapPin, Navigation, Footprints } from 'lucide-react';
-import { LANDMARKS } from '../../offline/constants';
-import { formatDistance } from '../../offline/searchEngine';
+import { LANDMARKS } from '../../offline/application/constants';
+import { formatDistance } from '../../offline/application/searchEngine';
 
 export default function OfflineRoutePanel({ destination, origin, mode, onMode, onOrigin, onGps, onMapPick, onCalculate, route, busy, gpsBusy, error, onCancel }) {
   return <div className="offline-route-panel">

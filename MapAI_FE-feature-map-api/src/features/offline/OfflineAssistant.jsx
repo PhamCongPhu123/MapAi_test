@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, Send, Sparkles, User, X } from 'lucide-react';
-import { askLocalAssistant, PROMPTS } from '../../offline/localAiAgent';
+import { askLocalAssistant, PROMPTS } from '../../offline/application/localAiAgent';
 import PlaceCard from './PlaceCard';
 import Dialog from './Dialog';
-import { useCompactLayout } from '../../offline/useCompactLayout';
+import { useCompactLayout } from '../../offline/presentation/useCompactLayout';
 
 export default function OfflineAssistant({ places, origin, onSelect, onClose, open, available }) {
   const compact = useCompactLayout();

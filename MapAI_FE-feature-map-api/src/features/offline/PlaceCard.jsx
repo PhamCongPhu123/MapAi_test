@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Heart, MapPin } from 'lucide-react';
 import { localAssetUrl } from '../../offline/packageManager';
-import { categoryLabel } from '../../offline/constants';
-import { formatDistance } from '../../offline/searchEngine';
+import { categoryLabel } from '../../offline/application/constants';
+import { formatDistance } from '../../offline/application/searchEngine';
 
 export function PlaceImage({ place, large = false }) {
   const [url, setUrl] = useState(null);

@@ -1,3 +1,4 @@
+using MapAI.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -8,11 +9,13 @@ using MapAI.Common.Helpers;
 using MapAI.Common.Configs;
 using MapAI.Domain.Enums;
 using MapAI.Domain.Entities;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using MapAI.Infrastructure.Repositories;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +50,8 @@ builder.Services.Configure<MailSetting>(builder.Configuration.GetSection("MailSe
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAccountTokenRepository, AccountTokenRepository>();
 builder.Services.AddScoped<ILocationRepository, LocationRepository>();
+builder.Services.AddScoped<ICommunityLocationRepository, CommunityLocationRepository>();
+builder.Services.AddScoped<IGoogleIdentityRepository, GoogleIdentityRepository>();
 builder.Services.AddScoped<IAiRepository, GeminiRepository>();
 builder.Services.AddScoped<IOsmRepository, OsmRepository>();
 builder.Services.AddScoped<IFoursquareRepository, FoursquareRepository>();
@@ -59,6 +64,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<ITokenStoreService, TokenStoreService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddScoped<ICommunityLocationService, CommunityLocationService>();
 builder.Services.AddScoped<IMapService, MapService>();
 builder.Services.AddScoped<IFoursquareService, FoursquareService>();
 builder.Services.AddScoped<IAiService, AiService>();
@@ -103,6 +109,13 @@ builder.Services.AddAuthentication(options =>
                 context.Fail("User is inactive or deleted");
                 return;
             }
+
+            var credentialVersion = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(user.PasswordHash)));
+            if (context.Principal.FindFirst("credential_version")?.Value != credentialVersion)
+            {
+                context.Fail("Credentials changed. Please login again.");
+                return;
+            }
             
             if (user.Role.ToString() != roleInToken)
             {
@@ -138,8 +151,21 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("password-recovery", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+});
+
 // Exception Handling
-builder.Services.AddExceptionHandler<MapAI.Common.Helpers.GlobalExceptionHandler>();
+builder.Services.AddExceptionHandler<MapAI.API.Middleware.GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
@@ -158,6 +184,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -169,3 +196,5 @@ if (!app.Environment.IsDevelopment())
 app.MapControllers();
 
 app.Run();
+
+public partial class Program { }

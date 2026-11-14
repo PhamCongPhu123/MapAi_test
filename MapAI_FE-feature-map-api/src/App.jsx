@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import MainLayout from './components/MainLayout'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -10,6 +10,8 @@ import Explore from './pages/Explore'
 import MapPage from './pages/MapPage'
 import OfflineMapPage from './pages/OfflineMapPage'
 import { GoogleOAuthProvider } from '@react-oauth/google'
+import { canUseGoogleWebLogin } from './config/platform'
+import MapModeBoundary from './components/MapModeBoundary'
 import Profile from './pages/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
@@ -19,16 +21,19 @@ import AdminLayout from './pages/Admin/AdminLayout'
 import Dashboard from './pages/Admin/Dashboard'
 import UserManagement from './pages/Admin/UserManagement'
 import LocationManagement from './pages/Admin/LocationManagement'
+import ContributionModeration from './pages/Admin/ContributionModeration'
 
 import './App.css'
 
 function App() {
   const { user } = useAuth();
+  const location = useLocation();
 
   // Helper to get redirect path based on role
   const getHomeRedirect = () => {
     if (user?.role === 'Admin' || user?.role == 0) return "/admin/dashboard";
-    return "/";
+    const from = location.state?.from;
+    return from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/';
   };
 
   return (
@@ -38,7 +43,7 @@ function App() {
         <Route path="/" element={<Home />} />
         
         {/* Auth routes - redirect to home if already logged in */}
-        <Route path="/login" element={user ? <Navigate to={getHomeRedirect()} replace /> : <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}><Login /></GoogleOAuthProvider>} />
+        <Route path="/login" element={user ? <Navigate to={getHomeRedirect()} replace /> : canUseGoogleWebLogin ? <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}><Login /></GoogleOAuthProvider> : <Login />} />
         <Route path="/register" element={user ? <Navigate to={getHomeRedirect()} replace /> : <Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={user ? <Navigate to={getHomeRedirect()} replace /> : <ForgotPassword />} />
@@ -51,9 +56,9 @@ function App() {
       </Route>
 
       {/* Local exploration is public; online accounts/admin keep their existing guards. */}
-      <Route path="/map" element={<OfflineMapPage />} />
       <Route path="/offline" element={<OfflineMapPage />} />
-      <Route element={<ProtectedRoute />}>
+      <Route element={<MapModeBoundary />}>
+        <Route path="/map" element={<MapPage />} />
         <Route path="/map/online" element={<MapPage />} />
       </Route>
 
@@ -64,6 +69,7 @@ function App() {
           <Route path="/admin/dashboard" element={<Dashboard />} />
           <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/admin/locations" element={<LocationManagement />} />
+          <Route path="/admin/contributions" element={<ContributionModeration />} />
         </Route>
       </Route>
 

@@ -6,7 +6,7 @@ Tài liệu này cung cấp cái nhìn chi tiết nhất về kiến trúc, cấ
 
 ## Phần 1: Kiến trúc Hệ thống (Detailed Clean Architecture)
 
-Dự án tuân thủ nghiêm ngặt mô hình **Clean Architecture**, đảm bảo tính độc lập và dễ mở rộng:
+Dự án tổ chức theo **Clean Architecture 3 lớp**: Giao diện (`API`), Nghiệp vụ (`Application` + `Domain`, với thư viện hỗ trợ `Common`), Dữ liệu (`Infrastructure`). Các project dưới đây là cách chia mã nguồn trong ba lớp. Xem [quy tắc phụ thuộc, DI và migrations](../ARCHITECTURE.md).
 
 1.  **MapAI.API (Lớp hiển thị & Điều hướng)**
     *   **Controllers**: Xử lý HTTP Request, định nghĩa Route và bóc tách dữ liệu từ Body/Query.
@@ -22,16 +22,18 @@ Dự án tuân thủ nghiêm ngặt mô hình **Clean Architecture**, đảm b�
     *   **Entities**: Các bảng trong Database (User, Location, AccountToken).
     *   **Models (DTOs)**: Định nghĩa cấu trúc dữ liệu trao đổi (Request/Response).
     *   **Enums**: Định nghĩa hằng số cho Role (Admin=0, User=1) và TokenType.
+    *   **Ports**: Interface repository do lớp nghiệp vụ sở hữu; không chứa DbContext hoặc Entity Framework.
 
 4.  **MapAI.Infrastructure (Lớp Hạ tầng & Tích hợp)**
     *   **Repositories**: Truy vấn trực tiếp vào PostgreSQL qua Entity Framework Core.
+    *   **Persistence**: `MapAIContext` và migrations; Application chỉ gọi repository qua port.
     *   **External Services**:
         *   **GeminiRepository**: Gọi API Google AI để phân loại ý định (Router).
         *   **OsmRepository**: Tích hợp Nominatim (Search), Overpass (Nearby), và OSRM (Direction).
         *   **StorageRepository**: Tương tác với Supabase Storage qua HttpClient (Hỗ trợ upload/delete theo bucket).
 
 5.  **MapAI.Common (Lớp Tiện ích)**
-    *   **Helpers**: `HashHelper` (SHA256 cho mật khẩu và token), `GlobalExceptionHandler`.
+    *   **Helpers**: `HashHelper` cho mật khẩu và token; `GlobalExceptionHandler` nằm ở middleware của API.
     *   **Configs**: Các lớp Map dữ liệu từ `appsettings.json`.
 
 ---

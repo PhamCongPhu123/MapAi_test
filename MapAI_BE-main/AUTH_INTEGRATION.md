@@ -2,6 +2,33 @@
 
 This document describes the authentication flow and API specifications for the MapAI project. The Backend (BE) follows a secure, session-aware JWT architecture with support for Refresh Tokens.
 
+## Đăng ký và đăng nhập trên máy tính / điện thoại
+
+Người dùng **không cần quản trị viên duyệt tài khoản**. Luồng email/mật khẩu là: đăng ký → mở liên kết xác thực trong email → đăng nhập. Việc admin duyệt chỉ áp dụng cho địa điểm cộng đồng.
+
+- Tài khoản đăng ký công khai luôn có vai trò `User`; API bỏ qua mọi trường `role` do client gửi. Enum trong database là `Admin = 0`, `User = 1`.
+- Nhập email không tồn tại hoặc mật khẩu sai đều hiển thị **Email hoặc mật khẩu không chính xác.** (`401`, `INVALID_CREDENTIALS`). Chưa xác thực email vẫn có thông báo riêng và nút gửi lại.
+- Nếu chưa xác thực, trang đăng nhập hiển thị lý do và nút **Gửi lại email xác thực**. Chờ ít nhất 60 giây giữa hai lần gửi. Liên kết mới có hiệu lực 5 phút và thay thế liên kết trước đó; kiểm tra cả Spam.
+- Tài khoản cũ đang chờ xác thực vẫn dùng được nút gửi lại, không cần đăng ký lại hoặc sửa `IsActive` bằng SQL. Tài khoản bị vô hiệu hóa không thể mở khóa qua gửi lại email.
+- Với liên kết đã hết hạn, quay về đăng nhập, nhập email/mật khẩu rồi bấm đăng nhập để hiện hướng dẫn gửi lại.
+- Khi một liên kết hợp lệ đã xác thực thành công, mở lại hoặc tải lại liên kết đó vẫn hiển thị thành công. Backend đánh dấu token email đã dùng bằng `IsDeleted = true` và lưu hash làm bằng chứng; không lưu token thô. Việc đánh dấu và kích hoạt tài khoản nằm trong cùng transaction, hỗ trợ cả hai yêu cầu gửi đồng thời. Token đã dùng không thể kích hoạt lại tài khoản bị vô hiệu hóa; token sai hoặc hết hạn trước khi được dùng vẫn bị từ chối.
+- Trang xác thực chỉ hiển thị một kết quả trên trang, không phát thêm toast thành công/thất bại riêng. Khi chuyển sang liên kết khác, kết quả của liên kết trước không được dùng cho liên kết mới. Những liên kết đã được backend cũ xóa sau khi xác thực không có bằng chứng để kiểm tra lại; người dùng đã xác thực có thể đăng nhập trực tiếp.
+- Khi gửi email thất bại, tài khoản có thể đã được tạo. API trả `VERIFICATION_EMAIL_UNAVAILABLE`; frontend chuyển sang hướng dẫn gửi lại thay vì yêu cầu đăng ký một tài khoản trùng email.
+- Backend dùng bảng `Users` và `AccountTokens` của ứng dụng, không dùng Supabase Auth để đăng nhập.
+
+Backend cần `FrontendUrl` trỏ đến đúng địa chỉ website đang chạy. Ví dụ trước khi chạy backend trong PowerShell:
+
+```powershell
+$env:FrontendUrl = "http://localhost:5173"
+dotnet run --project .\src\MapAI.API --launch-profile http --urls http://0.0.0.0:5028
+```
+
+Khi mở thư trên điện thoại thật, `localhost` là điện thoại đó. Có thể mở liên kết trên máy tính đang chạy website để xác thực trước, rồi đăng nhập trên app; hoặc cấu hình `FrontendUrl` thành địa chỉ website mà điện thoại truy cập được.
+
+Nếu không nhận được thư hoặc API báo không gửi được email, kiểm tra các khóa `MailSetting:Host`, `Port`, `Mail`, `Password` ở cấu hình backend; cấu hình gửi thư hiện dùng SMTP STARTTLS. Dùng biến môi trường hoặc .NET User Secrets cho mật khẩu, không đưa mật khẩu vào chat hay Git. Kiểm thử tự động bên dưới thay dịch vụ gửi mail bằng hộp thư trong bộ nhớ, không xác nhận SMTP thực tế.
+
+Bản sửa không yêu cầu migration mới. Với tài khoản tạo từ form đăng ký cũ, cần rà soát vai trò: form cũ đã gửi nhầm `role = 0` (Admin). Bản sửa ngăn đăng ký mới nhận quyền này; không tự hạ quyền hàng loạt tài khoản có sẵn vì không thể phân biệt admin hợp lệ với tài khoản tạo nhầm.
+
 ## 1. Authentication Strategy
 - **Primary Auth:** Stateless JWT (Access Token) + Stateful Session (Refresh Token).
 - **Security:** Access Tokens should be short-lived (e.g., 15-60 mins), and Refresh Tokens should be long-lived (e.g., 30 days).
@@ -22,6 +49,7 @@ This document describes the authentication flow and API specifications for the M
 | `/logout` | `POST` | `None` (Authorized) | Deletes the session from DB & invalidates tokens. |
 | `/me` | `GET` | `None` (Authorized) | Returns current user info (ID, Email, Role). |
 | `/verify-email`| `GET` | `?userId=&token=` | Activates the user account. |
+| `/resend-verification` | `POST` | `{ "email": "user@example.com" }` | Sends a new verification link to an account awaiting verification. Generic success for active, unknown or disabled emails. |
 | `/forgot-password`| `POST` | `ForgotPasswordRequest` | Sends a reset link to the user's email. |
 | `/reset-password`| `POST` | `ResetPasswordRequest` | Updates the password using a reset token. |
 | `/google-login`| `POST` | `GoogleLoginRequest`| Authenticates via Google IdToken. |
@@ -54,8 +82,7 @@ This document describes the authentication flow and API specifications for the M
   "password": "securepassword",
   "fullName": "John Doe",
   "phoneNumber": "0987654321",
-  "dateOfBirth": "2000-01-01T00:00:00Z",
-  "role": 0 // 0: User, 1: Admin
+  "dateOfBirth": "2000-01-01T00:00:00Z"
 }
 ```
 
@@ -78,10 +105,19 @@ Implement two interceptors in your API client:
     - If `/refresh` fails: Clear storage and redirect to `/login`.
 
 ### Phase 3: Error Handling
-The BE returns standard `ProblemDetails`. Your FE should handle these specific cases:
-- **401 (Unauthorized):** Token expired or session revoked (Role changed, Logout).
-- **400 (Bad Request):** Validation errors (e.g., "Email already exists", "Invalid credentials").
-- **500 (Server Error):** Check `detail` field for the exact error message.
+Expected auth failures return `{ "code": "...", "message": "..." }`. Model validation uses `ProblemDetails` with `errors`. Clients accept `message`, `detail` and validation `errors`.
+
+| Status | Code | Meaning |
+| :--- | :--- | :--- |
+| 401 | `INVALID_CREDENTIALS` | Incorrect email or password. |
+| 401 | `SESSION_EXPIRED` | Refresh token expired, revoked or user inactive. |
+| 403 | `EMAIL_NOT_VERIFIED` | Verify email or resend the link; no admin approval required. |
+| 403 | `ACCOUNT_DISABLED` | Account is disabled, not awaiting verification. |
+| 409 | `EMAIL_EXISTS` | Email already registered. |
+| 400 | `VERIFICATION_EXPIRED` / `VERIFICATION_INVALID` | Resend verification from login. |
+| 429 | `VERIFICATION_COOLDOWN` | Wait 60 seconds before resending. |
+| 503 | `VERIFICATION_EMAIL_UNAVAILABLE` | Account awaits verification; mail delivery failed. |
+| 500 | `AUTH_UNAVAILABLE` | Unexpected server failure; response does not expose internal errors. |
 
 ---
 
@@ -97,3 +133,21 @@ The BE returns standard `ProblemDetails`. Your FE should handle these specific c
 The JWT contains a `role` claim. Use this to hide/show UI elements (e.g., Admin Dashboard).
 - `User`: Standard access.
 - `Admin`: Full access including system settings.
+
+## 7. Regression checks
+
+Authentication integration checks create a disposable database on a **loopback PostgreSQL server** with CREATE DATABASE permission. They test the real HTTP controllers, BCrypt, JWT middleware, session revocation and database, replacing only email delivery. They never migrate the configured Supabase database or send external mail.
+
+```powershell
+# From MapAI_BE-main; replace the local test connection for your PostgreSQL setup.
+$env:MAPAI_TEST_CONNECTION = "Host=127.0.0.1;Port=5432;Username=local_test_user;Database=postgres"
+dotnet run --project .\tests\MapAI.AuthTests
+```
+
+Frontend checks (from the frontend folder, with Playwright Chromium installed):
+
+```powershell
+npx playwright test tests/e2e/auth.spec.js
+```
+
+These UI checks simulate API replies to verify credential warnings, registration, resend and verification under React StrictMode on phone and desktop layouts. They cover reload/back navigation, changing links while awaiting a response and avoiding contradictory success/error notifications. The PostgreSQL checks cover simultaneous verification, repeated/expired completed links, unused expired tokens and disabled accounts.

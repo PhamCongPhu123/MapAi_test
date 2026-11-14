@@ -1,3 +1,4 @@
+import { mockStreetTiles } from './helpers/basemap.js';
 import { test, expect } from '@playwright/test';
 
 const assistant = page => page.getByRole('complementary', { name: 'Trợ lý khám phá MapAI' })
@@ -17,6 +18,8 @@ test('Online and offline use the same desktop map/chat split and dark assistant 
   await page.route('**/map/search?*', route => route.fulfill({ json: [
     { display_name: 'Cầu Rồng, Đà Nẵng', lat: '16.0611', lon: '108.2266', type: 'bridge' },
   ] }));
+  await mockStreetTiles(page);
+  await page.route('**/api/v1/location', route => route.fulfill({ json: [] }));
   await page.goto('/map/online');
   const onlinePanel = page.locator('header').filter({ hasText: 'MapAI Assistant' }).locator('..');
   await expect(onlinePanel).toBeVisible();
@@ -25,8 +28,8 @@ test('Online and offline use the same desktop map/chat split and dark assistant 
   // Choosing an online search result must stay in the online flow.
   await page.getByPlaceholder('Tìm địa điểm, địa chỉ...').fill('cau rong');
   await page.getByRole('button', { name: /Cầu Rồng, Đà Nẵng/ }).click();
-  await expect(page).toHaveURL(/\/map\/online\?lat=16\.0611&lng=108\.2266/);
-  await page.goto('/map');
+  await expect(page).toHaveURL(/\/map\?lat=16\.0611&lng=108\.2266/);
+  await page.goto('/offline');
   await expect(page.getByRole('heading', { name: '28 địa điểm đang chờ bạn' })).toBeVisible();
   const offlinePanel = page.getByRole('complementary', { name: 'Trợ lý khám phá MapAI' });
   await expect(offlinePanel).toBeVisible();
@@ -40,7 +43,7 @@ test('Online and offline use the same desktop map/chat split and dark assistant 
 });
 
 test('The dark assistant retains its conversation after closing and reopening offline', async ({ page, context }) => {
-  await page.goto('/map');
+  await page.goto('/offline');
   await expect(page.getByRole('heading', { name: '28 địa điểm đang chờ bạn' })).toBeVisible();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await context.setOffline(true);

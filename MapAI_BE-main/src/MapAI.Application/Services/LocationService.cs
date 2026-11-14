@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Text.Json;
-using MapAI.Infrastructure.Interfaces;
+using MapAI.Domain.Ports;
 using MapAI.Application.Interfaces;
 using MapAI.Domain.Entities;
 using MapAI.Domain.Models.Location;
@@ -14,11 +14,13 @@ namespace MapAI.Application.Services
     {
         private readonly ILocationRepository _locationRepository;
         private readonly IStorageRepository _storageRepository;
+        private readonly ICommunityLocationRepository _communityRepository;
 
-        public LocationService(ILocationRepository locationRepository, IStorageRepository storageRepository)
+        public LocationService(ILocationRepository locationRepository, IStorageRepository storageRepository, ICommunityLocationRepository communityRepository)
         {
             _locationRepository = locationRepository;
             _storageRepository = storageRepository;
+            _communityRepository = communityRepository;
         }
 
         public async Task<LocationResponse> GetLocationByIdAsync(string id)
@@ -26,7 +28,7 @@ namespace MapAI.Application.Services
             var location = await _locationRepository.GetByIdAsync(id);
             if (location == null) throw new KeyNotFoundException("Location not found.");
 
-            return MapToResponse(location);
+            return await MapWithCommunityAsync(location);
         }
 
         public async Task<LocationResponse> GetLocationByTitleAsync(string title)
@@ -40,7 +42,7 @@ namespace MapAI.Application.Services
             
             if (location == null) throw new KeyNotFoundException("Location with this title not found.");
 
-            return MapToResponse(location);
+            return await MapWithCommunityAsync(location);
         }
 
         public async Task<LocationResponse> GetLocationByDetailsAsync(string title, double lat, double lng)
@@ -57,13 +59,13 @@ namespace MapAI.Application.Services
                 
                 // Chỉ return nếu điểm số không quá tệ (khớp ít nhất một vài từ quan trọng)
                 if (CalculateRelevanceScore(bestCoordMatch, title) > 15)
-                    return MapToResponse(bestCoordMatch);
+                    return await MapWithCommunityAsync(bestCoordMatch);
             }
 
             // 2. CHIẾN LƯỢC ƯU TIÊN 2: Khớp tên tuyệt đối
             var locations = await _locationRepository.SearchByTitleAsync(title);
             var exactTitleMatch = locations.FirstOrDefault(l => l.Title.Equals(title, StringComparison.OrdinalIgnoreCase));
-            if (exactTitleMatch != null) return MapToResponse(exactTitleMatch);
+            if (exactTitleMatch != null) return await MapWithCommunityAsync(exactTitleMatch);
 
             // 3. CHIẾN LƯỢC ƯU TIÊN 3: Phân tích mờ kết hợp khoảng cách (Lên đến 1km)
             const double maxSquaredDistance = 0.0001; // Khoảng 1km (0.01 độ)
@@ -83,7 +85,7 @@ namespace MapAI.Application.Services
             if (bestCandidate == null || (bestCandidate.Score < minAcceptableScore && bestCandidate.Distance > 0.000001)) 
                 throw new KeyNotFoundException("Location with these details not found.");
 
-            return MapToResponse(bestCandidate.Location);
+            return await MapWithCommunityAsync(bestCandidate.Location);
         }
 
         public async Task<IEnumerable<LocationResponse>> GetAllLocationsAsync(string? title = null)
@@ -98,7 +100,7 @@ namespace MapAI.Application.Services
                 var searchResults = await _locationRepository.SearchByTitleAsync(title);
                 locations = searchResults.OrderByDescending(l => CalculateRelevanceScore(l, title));
             }
-            return locations.Select(MapToResponse);
+            return await MapManyWithCommunityAsync(locations);
         }
 
         private static int CalculateRelevanceScore(LocationEntity entity, string query)
@@ -156,7 +158,7 @@ namespace MapAI.Application.Services
             };
 
             var created = await _locationRepository.AddAsync(location);
-            return MapToResponse(created);
+            return await MapWithCommunityAsync(created);
         }
 
         public async Task<LocationResponse> UpdateLocationAsync(string id, UpdateLocationRequest request)
@@ -179,7 +181,7 @@ namespace MapAI.Application.Services
             location.UpdatedAt = DateTimeOffset.UtcNow;
 
             await _locationRepository.UpdateAsync(location);
-            return MapToResponse(location);
+            return await MapWithCommunityAsync(location);
         }
 
         public async Task DeleteLocationAsync(string id)
@@ -192,8 +194,28 @@ namespace MapAI.Application.Services
 
         public async Task<string> UploadThumbnailAsync(Stream imageStream, string fileName, string contentType)
         {
-            var newFileName = $"location_{DateTime.UtcNow.Ticks}_{fileName}";
+            var newFileName = $"location_{Guid.NewGuid():N}{System.IO.Path.GetExtension(fileName).ToLowerInvariant()}";
             return await _storageRepository.UploadFileAsync(imageStream, newFileName, contentType, "location");
+        }
+
+        private async Task<LocationResponse> MapWithCommunityAsync(LocationEntity entity) =>
+            (await MapManyWithCommunityAsync([entity])).Single();
+
+        private async Task<List<LocationResponse>> MapManyWithCommunityAsync(IEnumerable<LocationEntity> entities)
+        {
+            var locations = entities.ToList();
+            var ids = locations.Select(l => l.Id).ToArray();
+            var summaries = await _communityRepository.SummariesAsync(ids);
+            return locations.Select(location =>
+            {
+                var response = MapToResponse(location);
+                if (summaries.TryGetValue(location.Id, out var summary))
+                {
+                    response.CommunityReviewCount = summary.Count;
+                    response.CommunityRating = Math.Round(summary.Average, 1);
+                }
+                return response;
+            }).ToList();
         }
 
         private static LocationResponse MapToResponse(LocationEntity entity)
@@ -214,6 +236,7 @@ namespace MapAI.Application.Services
             return new LocationResponse
             {
                 Id = entity.Id,
+                IsUserContribution = entity.IsUserContribution,
                 Title = entity.Title,
                 PlaceId = entity.PlaceId,
                 Address = entity.Address,
