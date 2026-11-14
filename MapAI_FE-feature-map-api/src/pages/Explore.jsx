@@ -67,7 +67,7 @@ const Explore = () => {
   }, [filteredLocations, currentPage]);
 
   const handleLocationClick = (loc) => {
-    navigate(`/map?lat=${loc.lat}&lng=${loc.lng}`);
+    navigate(`/map/online?lat=${loc.lat}&lng=${loc.lng}`);
   };
 
   const quickSuggestions = ["Ăn gì", "Cafe đẹp", "Check-in", "Cầu Rồng"];

@@ -1,5 +1,5 @@
 # Stage 1: Build the frontend application
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 
 # Add build argument for API URL
@@ -10,7 +10,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci
 
 # Copy the remaining frontend code
 COPY . .

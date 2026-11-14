@@ -3,19 +3,18 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ToastProvider } from './context/ToastContext.jsx'
-import { GoogleOAuthProvider } from '@react-oauth/google'
+import '@fontsource/plus-jakarta-sans/latin-400.css'
+import '@fontsource/plus-jakarta-sans/latin-600.css'
+import '@fontsource/plus-jakarta-sans/latin-700.css'
+import '@fontsource/plus-jakarta-sans/vietnamese-400.css'
+import '@fontsource/plus-jakarta-sans/vietnamese-600.css'
+import '@fontsource/plus-jakarta-sans/vietnamese-700.css'
+import './offline/pwa'
 import './index.css'
 import App from './App.jsx'
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-if (!GOOGLE_CLIENT_ID) {
-  console.warn("Cảnh báo: VITE_GOOGLE_CLIENT_ID chưa được cấu hình trong file .env");
-}
-
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || ""}>
       <BrowserRouter>
         <ToastProvider>
           <AuthProvider>
@@ -23,6 +22,5 @@ createRoot(document.getElementById('root')).render(
           </AuthProvider>
         </ToastProvider>
       </BrowserRouter>
-    </GoogleOAuthProvider>
   </StrictMode>,
 )

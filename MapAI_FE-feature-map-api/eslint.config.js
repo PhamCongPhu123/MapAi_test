@@ -30,4 +30,8 @@ export default defineConfig([
       }],
     },
   },
+  {
+    files: ['scripts/**/*.mjs', 'tests/**/*.js', 'playwright.config.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
 ])

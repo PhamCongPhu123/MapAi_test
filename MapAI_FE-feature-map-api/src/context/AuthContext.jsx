@@ -3,6 +3,7 @@ import { authApi } from "../services/authService";
 import { userApi } from "../services/userService";
 import { clearTokens, decodeToken } from "../services/api";
 import { AuthContext } from "./authContext";
+import { isOffline } from '../offline/network';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -11,6 +12,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const accessToken = localStorage.getItem("accessToken");
+      // Public local exploration must not call auth APIs or discard tokens while offline.
+      if (isOffline()) { setIsLoading(false); return; }
       if (accessToken) {
         try {
           const decoded = decodeToken(accessToken);

@@ -1,0 +1,65 @@
+{
+  "id": "danang",
+  "version": "2026.11.14.1",
+  "bounds": [
+    108.14,
+    15.97,
+    108.33,
+    16.16
+  ],
+  "sourceDate": "2026-05-26",
+  "attribution": "© OpenStreetMap contributors · ODbL 1.0",
+  "assets": [
+    {
+      "path": "danang.pmtiles",
+      "bytes": 1257344,
+      "sha256": "a52f3384df2713eb141561f9d155f5d7432e1a6e0cd4fda6eccac70601865563"
+    },
+    {
+      "path": "entertainment.webp",
+      "bytes": 5544,
+      "sha256": "33114aee65d77c95f17bb5650f38363ab28fa70e85d45ccb76c0d8742a530c2c"
+    },
+    {
+      "path": "fonts/Noto Sans Regular/0-255.pbf",
+      "bytes": 76580,
+      "sha256": "ef1f38a3f1978591e846e9eaddf8a54f7047f546fc6aaed7872cc53151a5de78"
+    },
+    {
+      "path": "fonts/Noto Sans Regular/256-511.pbf",
+      "bytes": 127219,
+      "sha256": "992557f9e2574cfb9a75e16c7b52832578849772b7c9a6e480d6213fb008fe5d"
+    },
+    {
+      "path": "fonts/Noto Sans Regular/7680-7935.pbf",
+      "bytes": 130591,
+      "sha256": "21672116227dc22128cb43a58ae19d4bc5ebb5d7d321600317d2df828dced514"
+    },
+    {
+      "path": "food.webp",
+      "bytes": 4608,
+      "sha256": "b5e434db9b451144e4f2bb847ff90e6d46d0885ba1c430c9e7b95477ebea9fdc"
+    },
+    {
+      "path": "geography.json",
+      "bytes": 898,
+      "sha256": "51f640e12713f8e7893a3fd90df885bf87a379f5db614b62de112b2548c7be73"
+    },
+    {
+      "path": "places.json",
+      "bytes": 14587,
+      "sha256": "1c7d70756614752900c3d1d984a52bb2de0b8a58a189b11ecfb24d3dca1a3ce3"
+    },
+    {
+      "path": "roads.json",
+      "bytes": 2668340,
+      "sha256": "5c5e9ff79034a46ca82b8d51088fea6fd15a5f6204c196333db0224fced2c1e1"
+    },
+    {
+      "path": "sightseeing.webp",
+      "bytes": 3584,
+      "sha256": "cd90d4bcb037f27e423fd802c7b226cd84c8f36a71af14391717eb7910c0f38a"
+    }
+  ],
+  "bytes": 4289295
+}

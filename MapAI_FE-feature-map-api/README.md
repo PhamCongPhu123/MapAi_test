@@ -49,9 +49,27 @@ aaaa
 
 ## 💻 Hướng Dẫn Chạy Dự Án
 
+### Bản đồ Offline-First (F0–F5)
+
+Mở **`/map`** hoặc **`/offline`** để dùng bản đồ PMTiles, tìm kiếm không dấu, yêu thích/lịch sử, chỉ đường A* và trợ lý tiếng Việt cục bộ. Không cần backend, tài khoản hay API key. Bản đồ online cũ được giữ tại **`/map/online`**.
+
+Để demo mất mạng thật, dùng Node.js 22.12+ và chạy:
+
+```bash
+npm ci
+npm run build
+npm run preview -- --host 0.0.0.0
+```
+
+Mở `/map` khi có mạng, chờ huy hiệu **Đà Nẵng sẵn sàng**, sau đó ngắt mạng và tải lại. `npm run dev` không bật Service Worker. Bản triển khai cần HTTPS (hoặc localhost). Công tắc giả lập nằm trong cửa sổ quản lý dữ liệu.
+
+Gói hiện có 28 địa điểm tuyển chọn và đường bộ khu vực trung tâm Đà Nẵng. Ảnh là minh họa, giá/giờ là tham khảo. Xem [hướng dẫn Offline](docs/OFFLINE.md) để biết phạm vi, cấu trúc, nguồn OSM, cách cập nhật dữ liệu và chạy kiểm thử.
+
+### Luồng online hiện có
+
 1. **Cài đặt dependencies**:
    ```bash
-   npm install
+   npm ci
    ```
 
 2. **Cấu hình môi trường**:

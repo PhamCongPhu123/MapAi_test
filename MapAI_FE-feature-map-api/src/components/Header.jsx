@@ -70,7 +70,7 @@ const Header = () => {
           {[
             { name: 'Khám phá', icon: Compass, path: '/explore' },
             { name: 'Tính năng', icon: Zap, path: '/#features' },
-            { name: 'Bản đồ', icon: MapIcon, path: '/map' },
+            { name: 'Bản đồ offline', icon: MapIcon, path: '/map' },
           ].map((item) => (
             <button 
               key={item.name}

@@ -8,6 +8,8 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Explore from './pages/Explore'
 import MapPage from './pages/MapPage'
+import OfflineMapPage from './pages/OfflineMapPage'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import Profile from './pages/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
@@ -36,7 +38,7 @@ function App() {
         <Route path="/" element={<Home />} />
         
         {/* Auth routes - redirect to home if already logged in */}
-        <Route path="/login" element={user ? <Navigate to={getHomeRedirect()} replace /> : <Login />} />
+        <Route path="/login" element={user ? <Navigate to={getHomeRedirect()} replace /> : <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}><Login /></GoogleOAuthProvider>} />
         <Route path="/register" element={user ? <Navigate to={getHomeRedirect()} replace /> : <Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={user ? <Navigate to={getHomeRedirect()} replace /> : <ForgotPassword />} />
@@ -48,9 +50,11 @@ function App() {
         </Route>
       </Route>
 
-      {/* Protected routes OUTSIDE MainLayout (e.g. Map) */}
+      {/* Local exploration is public; online accounts/admin keep their existing guards. */}
+      <Route path="/map" element={<OfflineMapPage />} />
+      <Route path="/offline" element={<OfflineMapPage />} />
       <Route element={<ProtectedRoute />}>
-        <Route path="/map" element={<MapPage />} />
+        <Route path="/map/online" element={<MapPage />} />
       </Route>
 
       {/* Admin Routes */}

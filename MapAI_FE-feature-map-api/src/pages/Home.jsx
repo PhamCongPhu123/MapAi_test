@@ -152,11 +152,11 @@ function Home() {
             <motion.button 
               whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(59, 130, 246, 0.4)" }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/map")}
               className="w-full sm:w-auto px-10 py-4 bg-blue-600 text-white text-sm font-black rounded-xl flex items-center justify-center gap-2 group relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
-              <span className="relative z-10">Bắt đầu ngay</span>
+              <span className="relative z-10">Khám phá bản đồ offline</span>
               <MessageSquare className="w-4 h-4 group-hover:rotate-12 transition-transform" />
             </motion.button>
             <motion.button 

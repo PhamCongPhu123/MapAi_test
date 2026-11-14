@@ -57,7 +57,7 @@ const SearchBar = () => {
     setShowResults(false);
     
     // Đẩy lên URL dưới dạng map?lat=?&lng=?
-    navigate(`/map?lat=${lat}&lng=${lon}`);
+    navigate(`/map/online?lat=${lat}&lng=${lon}`);
   };
 
   return (
