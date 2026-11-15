@@ -3,7 +3,7 @@ import { askLocalAssistant } from '../../offline/application/localAiAgent.js';
 import { categoryLabel } from '../../offline/application/constants.js';
 
 export const localPlace = place => ({
-  ...place, id: `offline:${place.id}`, localId: place.id, source: 'offline',
+  ...place, key: place.key, id: place.serverId ? place.id : `offline:${place.id}`, localId: place.serverId ? undefined : place.id, source: place.serverId ? 'mapai' : 'offline',
   type: categoryLabel(place.category), photos: [], thumbnail: null,
   categories: [{ name: place.tags?.includes('ca phe') ? 'cafe' : place.category === 'food' ? 'restaurant' : place.category === 'sightseeing' ? 'attraction' : 'entertainment' }],
 });
@@ -56,7 +56,10 @@ export function createMapService({ remote, local, getMode, getLocalData }) {
         const found = (await places()).find(p => p.id === id);
         if (found) return localPlace(found);
       }
+      if ((getMode() === 'offline' || place.localId) && place.key && place.name) return { ...place, cachedOnly: true, photos: [] };
       if (getMode() === 'online') return remote.details(place, signal);
+      const stored = place.id && (await places()).find(p => p.id === place.id || p.serverId === place.id);
+      if (stored) return localPlace(stored);
       const candidates = await localSearch(place.name || '');
       const found = candidates.find(p => normalize(p.name) === normalize(place.name || '') ||
         (Number.isFinite(place.lat) && Number.isFinite(place.lng) && distanceMeters(place, p) < 80));

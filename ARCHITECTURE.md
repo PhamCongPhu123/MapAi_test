@@ -38,14 +38,14 @@ dotnet ef migrations add TenMigration --project MapAI_BE-main/src/MapAI.Infrastr
 | Lớp | Vị trí trong `MapAI_FE-feature-map-api/src` | Trách nhiệm |
 | --- | --- | --- |
 | 1. Giao diện | `pages`, `components`, `features/offline`, `offline/presentation`, `context`, `hooks` | React, trạng thái màn hình, sheet/dialog, tương tác bản đồ. |
-| 2. Nghiệp vụ | `map/application`, `offline/application`, các hàm thuần về lệnh/toạ độ trong `utils` và `services/mapTools.js` | Cài/kiểm tra gói, tìm kiếm, trợ lý cục bộ, tính tuyến A*, chuẩn hoá lệnh bản đồ. |
-| 3. Dữ liệu / thiết bị | `map/infrastructure`, `offline/infrastructure`, adapter API và vị trí trong `services` | IndexedDB/Dexie, tải asset, checksum, worker, Service Worker, mạng Capacitor, GPS, HTTP tới backend. |
+| 2. Nghiệp vụ | `sync/application`, `map/application`, `offline/application`, các hàm thuần về lệnh/toạ độ trong `utils` và `services/mapTools.js` | Cài/kiểm tra gói, tìm kiếm, trợ lý cục bộ, tính tuyến A*, chuẩn hoá lệnh bản đồ. |
+| 3. Dữ liệu / thiết bị | `sync/infrastructure`, `map/infrastructure`, `offline/infrastructure`, adapter API và vị trí trong `services` | IndexedDB/Dexie, tải asset, checksum, worker, Service Worker, mạng Capacitor, GPS, HTTP tới backend. |
 
 `offline/compositionRoot.js` truyền các port `repository`, `source`, `checksum`, `connectivity`, `storage`, `router`, `location` cho `createOfflineService`. Các facade `offline/packageManager.js`, `network.js`, `pwa.js` giữ API ổn định cho giao diện. UI offline không mở IndexedDB, tạo worker hay gọi GPS trực tiếp. Worker chỉ là adapter chạy thuật toán nghiệp vụ ngoài luồng UI.
 
 `/map` là một workspace công khai, dùng chung `MapPage`, `MapLibreView`, `SearchBar`, `DirectionsPanel` và `PlaceDetailPanel`. `map/application/createMapService.js` chọn adapter online/offline theo trạng thái kết nối. `map/presentation/useMapSession.js` là composition hook cấp service ổn định và cập nhật nguồn dữ liệu; khi đổi mạng không tạo lại MapLibre canvas. `/offline` và `/map/online` chỉ là alias chuyển về `/map`, giữ query/hash. Tài khoản vẫn cần cho chức năng ghi dữ liệu và quản trị. Việc chuyển mạng không xoá token đăng nhập. Đăng nhập, quản trị, đóng góp và đồng bộ server vẫn cần backend.
 
-Capacitor đóng gói shell và gói Đà Nẵng trong APK/IPA, phục vụ asset từ thiết bị. Native không phụ thuộc Service Worker, có thể cài dữ liệu vào IndexedDB ngay lần mở đầu ở chế độ máy bay. Web PWA cần mở online một lần để cache. Dữ liệu cá nhân offline nằm riêng trên thiết bị, chưa đồng bộ lên tài khoản.
+Capacitor đóng gói shell và gói Đà Nẵng trong APK/IPA, phục vụ asset từ thiết bị. Native không phụ thuộc Service Worker, có thể cài dữ liệu vào IndexedDB ngay lần mở đầu ở chế độ máy bay. Web PWA cần mở online một lần để cache. Yêu thích và hàng đợi ghi dữ liệu được lưu riêng theo tài khoản và đồng bộ qua backend; lịch sử và tuyến vẫn cục bộ. Các trường cơ bản của hồ sơ đã xác thực được cache để giữ định danh khi offline.
 
 ## Kiểm tra ranh giới
 
@@ -67,3 +67,9 @@ npm run test:e2e:offline
 `map/infrastructure/openFreeMapRuntime.js` dùng một snapshot style Liberty. Online giữ URL OpenFreeMap; offline đổi vị trí tài nguyên sang PMTiles và asset nhúng/PWA, giữ nguyên layer definition. `scripts/build-openfreemap-package.mjs` tải tile thật theo bounds Đà Nẵng, sprite và các glyph được dùng ở vùng này; giữ POI/graph tính đường cục bộ. Manifest gắn `mapProvider: openfreemap`, checksum và nguồn tile; gói định dạng cũ được nhận diện để cài lại, dữ liệu cá nhân vẫn giữ.
 
 Business map trả cùng contract place/route cho UI. `localRoute` chuyển A* sang cấu trúc geometry/distance/duration/steps mà DirectionsPanel đang dùng. UI hủy/bỏ kết quả tìm kiếm hoặc chi tiết cũ khi nguồn thay đổi. Việc đổi style và thêm lại lớp địa điểm/tuyến được đồng bộ theo `style.load`; trạng thái bản đồ sẵn sàng chỉ sau khi nguồn OpenMapTiles tải xong.
+
+## Đồng bộ dữ liệu
+
+`sync/application/createSyncService.js` nhận các port repository, remote, identity, clock, connectivity và checksum. `sync/compositionRoot.js` nối adapter IndexedDB/HTTP và vòng đời nền tảng. Giao diện không truy vấn IndexedDB trực tiếp. Yêu thích được ghi cùng outbox trong transaction, tombstone được giữ để truyền thao tác bỏ lưu, ACK chỉ xóa đúng UUID; dữ liệu Khách và các tài khoản không lẫn nhau.
+
+Backend `AccountSyncService` dùng `IAccountSyncRepository` để thực hiện nghiệp vụ và biên nhận idempotency. Adapter EF khóa theo tài khoản, thay đổi dữ liệu và ghi receipt trong một transaction. Controller chỉ dùng service và ID từ JWT. Migration `AddAccountSync` bổ sung bảng riêng, không sửa/xóa bảng địa điểm có sẵn. Cache catalog công khai có hash/version độc lập với snapshot tài khoản và gói nền OpenFreeMap. Xem [SYNC.md](MapAI_FE-feature-map-api/docs/SYNC.md) để biết quy tắc xung đột, hết hạn phiên và cách kiểm thử.

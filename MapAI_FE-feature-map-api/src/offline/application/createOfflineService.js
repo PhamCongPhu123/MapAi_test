@@ -1,5 +1,5 @@
 // Business/use-case layer. All storage, network, native and worker operations are injected ports.
-export function createOfflineService({ repository, source, checksum, connectivity, storage, router, location }) {
+export function createOfflineService({ repository, source, checksum, connectivity, storage, router, location, personal }) {
   let installing, loadedGraph;
   async function getInstalledPackage() {
     const pkg = await repository.getPackage();
@@ -42,8 +42,13 @@ export function createOfflineService({ repository, source, checksum, connectivit
   return {
     embedded: source.embedded, installPackage, loadPackage, getInstalledPackage,
     async deletePackage() { await repository.deletePackage(); await source.removeCachedAssets(); loadedGraph = undefined; },
-    toggleFavorite: id => repository.toggleFavorite(id), recordVisit: id => repository.recordVisit(id),
-    subscribePersonal: observer => repository.subscribePersonal(observer),
+    toggleFavorite: place => personal ? personal.toggleFavorite(place) : repository.toggleFavorite(place), recordVisit: id => repository.recordVisit(id),
+    subscribePersonal: observer => {
+      if (!personal) return repository.subscribePersonal(observer);
+      observer.next(personal.getSnapshot());
+      const unsubscribe = personal.subscribe(() => observer.next(personal.getSnapshot()));
+      return { unsubscribe };
+    },
     readAsset: path => repository.readAsset(path), localAssetUrl: path => repository.assetUrl(path),
     async calculateRoute(origin, destination, mode) {
       if (!loadedGraph) await loadPackage();

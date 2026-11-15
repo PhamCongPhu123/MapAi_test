@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testIgnore: ['**/offline.spec.js', '**/appearance.spec.js', '**/gps-and-sheet.spec.js', '**/package-integrity.spec.js', '**/unified.spec.js', '**/native-offline.spec.js'],
+  testIgnore: ['**/sync.spec.js', '**/offline.spec.js', '**/appearance.spec.js', '**/gps-and-sheet.spec.js', '**/package-integrity.spec.js', '**/unified.spec.js', '**/native-offline.spec.js'],
   fullyParallel: true,
   workers: 2,
   timeout: 45000,

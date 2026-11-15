@@ -13,6 +13,11 @@ import './offline/pwa'
 import './index.css'
 import NativeAppBridge from './components/NativeAppBridge.jsx'
 import App from './App.jsx'
+import { startSyncRuntime } from './sync/compositionRoot'
+import SyncFeedback from './sync/presentation/SyncFeedback'
+import './sync/presentation/sync.css'
+
+startSyncRuntime();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -20,6 +25,7 @@ createRoot(document.getElementById('root')).render(
         <NativeAppBridge />
         <ToastProvider>
           <AuthProvider>
+            <SyncFeedback />
             <App />
           </AuthProvider>
         </ToastProvider>

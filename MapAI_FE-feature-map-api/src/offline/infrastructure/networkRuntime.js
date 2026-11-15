@@ -4,15 +4,16 @@ const listeners = new Set();
 let simulated = false, connected = navigator.onLine;
 try { simulated = localStorage.getItem('mapai-offline-simulator') === 'true'; } catch { /* In-memory fallback. */ }
 let snapshot;
+let connectionType = navigator.connection?.type || 'unknown';
 const update = () => {
-  snapshot = { online: connected, simulated, offline: simulated || !connected };
+  snapshot = { online: connected, simulated, offline: simulated || !connected, connectionType };
   listeners.forEach(l => l());
 };
 window.addEventListener('online', () => { connected = true; update(); });
 window.addEventListener('offline', () => { connected = false; update(); });
 if (Capacitor.isNativePlatform()) {
-  Network.getStatus().then(status => { connected = status.connected; update(); }).catch(() => {});
-  Network.addListener('networkStatusChange', status => { connected = status.connected; update(); }).catch(() => {});
+  Network.getStatus().then(status => { connected = status.connected; connectionType = status.connectionType; update(); }).catch(() => {});
+  Network.addListener('networkStatusChange', status => { connected = status.connected; connectionType = status.connectionType; update(); }).catch(() => {});
 }
 update();
 export const subscribeNetwork = listener => { listeners.add(listener); return () => listeners.delete(listener); };

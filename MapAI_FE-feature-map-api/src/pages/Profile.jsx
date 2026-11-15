@@ -23,7 +23,7 @@ import { userApi } from '../services/userService';
 import { useToast } from '../hooks/useToast';
 
 export default function Profile() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser, offlineSession } = useAuth();
   const { addToast, removeToast } = useToast();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -56,6 +56,7 @@ export default function Profile() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    if (offlineSession) { addToast('Cập nhật hồ sơ cần kết nối mạng.', 'info'); return; }
     setIsUpdating(true);
     try {
       await userApi.updateInfo(formData);
@@ -86,6 +87,7 @@ export default function Profile() {
     const formDataObj = new FormData();
     formDataObj.append('file', file);
 
+    if (offlineSession) { addToast('Đổi ảnh đại diện cần kết nối mạng.', 'info'); return; }
     setIsUploading(true);
     const loadingToastId = addToast("Đang tải ảnh lên...", "loading", Infinity);
 
@@ -204,6 +206,7 @@ export default function Profile() {
 
                 <div className="flex-grow pt-4">
                   <div className="flex items-center gap-3">
+                    {offlineSession && <p className="sync-session-badge">Phiên ngoại tuyến • Đã xác thực trước đó</p>}
                     <h1 className="text-3xl font-black text-white tracking-tight italic uppercase">{user.fullName || user.name}</h1>
                     <CheckCircle size={20} className="text-blue-500" />
                   </div>
@@ -233,6 +236,7 @@ export default function Profile() {
                   <motion.button 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    aria-label="Đăng xuất"
                     onClick={handleLogout}
                     className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all"
                   >

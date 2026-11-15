@@ -23,6 +23,7 @@
     "offline:tiles": "node scripts/build-openfreemap-package.mjs",
     "mobile:sync:offline": "node scripts/mobile.mjs offline",
     "test:architecture": "node --test tests/architecture.test.mjs",
+    "test:e2e:sync": "playwright test --config playwright.sync.config.js",
     "test:e2e:offline": "playwright test --config playwright.offline.config.js",
     "test:native:offline": "playwright test --config playwright.native.config.js"
   },

@@ -4,7 +4,8 @@ import { indexedDbRepository } from './infrastructure/indexedDbRepository';
 import { packageSource, checksum, browserStorage } from './infrastructure/packageSource';
 import { createRoutingClient } from './infrastructure/routingClient';
 import { getDeviceLocation } from '../services/deviceLocation';
+import { syncService } from '../sync/compositionRoot';
 import { isOffline } from './infrastructure/networkRuntime';
 
 export const offlineService = createOfflineService({ repository: indexedDbRepository, source: packageSource,
-  checksum, connectivity: { isOffline }, storage: browserStorage, router: createRoutingClient(), location: getDeviceLocation });
+  checksum, connectivity: { isOffline }, storage: browserStorage, router: createRoutingClient(), location: getDeviceLocation, personal: syncService });

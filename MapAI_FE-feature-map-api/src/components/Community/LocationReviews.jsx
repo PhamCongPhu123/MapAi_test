@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useEffectEvent } from 'react';
 import { Star } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { syncService } from '../../sync/compositionRoot';
+import { useNetworkStatus } from '../../offline/network';
+import { useSyncStatus } from '../../sync/presentation/useSyncStatus';
 import { communityApi } from '../../services/communityService';
 
 export default function LocationReviews({ locationId }) {
   const { user } = useAuth();
+  const { offline } = useNetworkStatus();
+  const { owner } = useSyncStatus();
   const [data, setData] = useState(null);
   const [page, setPage] = useState(1);
   const [rating, setRating] = useState(0);
@@ -14,25 +19,42 @@ export default function LocationReviews({ locationId }) {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const initialized = useRef(false);
+  const dirty = useRef(false);
   const load = useCallback(async (signal, resetForm = false) => {
     try {
-      const result = await communityApi.reviews(locationId, page, signal);
+      const result = offline ? (await syncService.loadDraft('review-cache', locationId, owner))?.data || { items: [], myReview: null, totalCount: 0, averageRating: null, pageSize: 10 }
+        : await communityApi.reviews(locationId, page, signal);
+      if (!offline && !signal?.aborted) await syncService.saveDraft('review-cache', locationId, { data: result }, owner);
       if (signal?.aborted) return;
       if (page > 1 && result.items.length === 0) { setPage(Math.max(1, Math.ceil(result.totalCount / result.pageSize))); return; }
       setData(result);
       if (!initialized.current || resetForm) {
-        setRating(result.myReview?.rating || 0);
-        setComment(result.myReview?.comment || '');
+        const draft = resetForm ? null : await syncService.loadDraft('review', locationId, owner);
+        if (signal?.aborted) return;
+        setRating(draft?.rating ?? result.myReview?.rating ?? 0);
+        setComment(draft?.comment ?? result.myReview?.comment ?? '');
         initialized.current = true;
       }
       setError('');
     } catch (error) { if (!signal?.aborted) setError(error.message); }
-  }, [locationId, page]);
+  }, [locationId, page, offline, owner]);
+  useEffect(() => { initialized.current = false; setData(null); }, [owner, locationId]);
   useEffect(() => {
     const controller = new AbortController();
     load(controller.signal);
     return () => controller.abort();
-  }, [load]);
+  }, [load, owner]);
+
+  useEffect(() => {
+    if (!initialized.current || !user || !dirty.current) return;
+    const timer = setTimeout(() => { if (dirty.current) void syncService.saveDraft('review', locationId, { rating, comment }, owner).catch(() => {}); }, 300);
+    return () => clearTimeout(timer);
+  }, [rating, comment, locationId, user, owner]);
+
+  const flushReview = useEffectEvent(() => {
+    if (user && initialized.current && dirty.current) void syncService.saveDraft('review', locationId, { rating, comment }, owner).catch(() => {});
+  });
+  useEffect(() => () => flushReview(), []);
 
   async function save(event) {
     event.preventDefault();
@@ -40,7 +62,16 @@ export default function LocationReviews({ locationId }) {
     setBusy(true);
     setNotice('');
     try {
+      if (offline) {
+        await syncService.queue('review', { rating, comment: comment.trim() }, { locationId, expectedOwner: owner });
+        dirty.current = false;
+        await syncService.clearDraft('review', locationId, owner);
+        setNotice('Đã lưu đánh giá trên máy. Sẽ tự gửi khi có mạng.');
+        return;
+      }
       await communityApi.saveReview(locationId, { rating, comment: comment.trim() });
+      dirty.current = false;
+      await syncService.clearDraft('review', locationId, owner);
       await load(undefined, true);
       setNotice('Đã lưu đánh giá của bạn.');
       window.dispatchEvent(new Event('mapai:places-changed'));
@@ -52,6 +83,10 @@ export default function LocationReviews({ locationId }) {
     setBusy(true);
     setNotice('');
     try {
+      if (offline) {
+        await syncService.queue('review-delete', {}, { locationId, expectedOwner: owner });
+        setConfirmDelete(false); setNotice('Yêu cầu xóa đánh giá đang chờ đồng bộ.'); return;
+      }
       await communityApi.deleteReview(locationId);
       setConfirmDelete(false);
       setRating(0);
@@ -66,6 +101,7 @@ export default function LocationReviews({ locationId }) {
 
   return <section aria-label="Đánh giá cộng đồng MapAI" className="space-y-4">
     <h3 className="text-base font-bold">Đánh giá cộng đồng MapAI</h3>
+    {offline && <p className="sync-session-badge">Ngoại tuyến • Đánh giá mới được lưu vào hàng đợi</p>}
     {data && <p className="text-amber-300 font-semibold">{data.totalCount ? `${Number(data.averageRating).toFixed(1)}/5 · ${data.totalCount} đánh giá` : 'Chưa có đánh giá. Hãy chia sẻ trải nghiệm đầu tiên!'}</p>}
     {!data && !error && <p role="status">Đang tải đánh giá...</p>}
     {error && <div><p role="alert" className="text-rose-400 text-sm">{error}</p><button className="community-secondary mt-2" onClick={() => load()}>Thử tải lại đánh giá</button></div>}
@@ -73,9 +109,9 @@ export default function LocationReviews({ locationId }) {
     {user && data && <form onSubmit={save} className="space-y-3 border border-white/10 rounded-xl p-3">
       <p className="text-sm font-semibold">{data.myReview ? 'Sửa đánh giá của bạn' : 'Đánh giá của bạn'}</p>
       <div role="group" aria-label="Chọn số sao" className="flex gap-1">
-        {[1, 2, 3, 4, 5].map(value => <button key={value} type="button" aria-label={`${value} sao`} aria-pressed={rating === value} disabled={busy} onClick={() => setRating(value)} className="p-2 text-amber-400"><Star size={24} fill={value <= rating ? 'currentColor' : 'none'} /></button>)}
+        {[1, 2, 3, 4, 5].map(value => <button key={value} type="button" aria-label={`${value} sao`} aria-pressed={rating === value} disabled={busy} onClick={() => { dirty.current = true; setRating(value); }} className="p-2 text-amber-400"><Star size={24} fill={value <= rating ? 'currentColor' : 'none'} /></button>)}
       </div>
-      <label className="community-field">Chia sẻ trải nghiệm<textarea maxLength={2000} rows={3} value={comment} disabled={busy} onChange={event => setComment(event.target.value)} placeholder="Chất lượng món ăn, phục vụ, giá cả..." /></label>
+      <label className="community-field">Chia sẻ trải nghiệm<textarea maxLength={2000} rows={3} value={comment} disabled={busy} onChange={event => { dirty.current = true; setComment(event.target.value); }} placeholder="Chất lượng món ăn, phục vụ, giá cả..." /></label>
       <button type="submit" disabled={busy} className="community-primary w-full">{busy ? 'Đang lưu...' : data.myReview ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}</button>
       {data.myReview && !confirmDelete && <button type="button" disabled={busy} className="text-sm text-rose-300 p-2" onClick={() => setConfirmDelete(true)}>Xóa đánh giá của tôi</button>}
       {confirmDelete && <div className="space-y-2"><p className="text-sm">Bạn muốn xóa đánh giá này?</p><button type="button" disabled={busy} className="community-secondary text-rose-300" onClick={remove}>Xác nhận xóa đánh giá</button><button type="button" disabled={busy} className="community-secondary ml-2" onClick={() => setConfirmDelete(false)}>Giữ lại</button></div>}

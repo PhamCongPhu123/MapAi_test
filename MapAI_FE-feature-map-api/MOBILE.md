@@ -1,6 +1,6 @@
 # Chạy MapAI trên Android và iOS bằng Capacitor
 
-Nhánh `work-unified` dùng chung React/Vite cho website và Capacitor. Bản đồ online và offline nằm trong cùng ứng dụng; backend .NET chạy độc lập để cung cấp tài khoản, dữ liệu live và Gemini. Bản đồ offline, tìm kiếm, chỉ đường A* và trợ lý cục bộ dùng gói Đà Nẵng có sẵn, không cần backend.
+Nhánh `work-unified` dùng chung React/Vite cho website và Capacitor. Bản đồ online và offline nằm trong cùng ứng dụng; xem [hướng dẫn đồng bộ và migration mới](docs/SYNC.md); backend .NET chạy độc lập để cung cấp tài khoản, dữ liệu live và Gemini. Bản đồ offline, tìm kiếm, chỉ đường A* và trợ lý cục bộ dùng gói Đà Nẵng có sẵn, không cần backend.
 
 Kiến trúc tuân theo [3 lớp giao diện — nghiệp vụ — dữ liệu](../ARCHITECTURE.md). `/map` dùng cùng giao diện và MapLibre canvas cho cả hai chế độ; nguồn tìm kiếm, chi tiết, tuyến và trợ lý tự đổi theo mạng. `/offline` và `/map/online` là alias chuyển về `/map`. Bản đồ đọc công khai; thao tác ghi dữ liệu vẫn cần tài khoản.
 

@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 const ProtectedRoute = ({ requiredRole }) => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, offlineSession } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -17,6 +17,8 @@ const ProtectedRoute = ({ requiredRole }) => {
     // Redirect to login if not authenticated, saving the current location
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
+
+  if (offlineSession && requiredRole !== undefined) return <div className="min-h-screen bg-slate-950 text-white p-8"><h1>Quản trị cần kết nối mạng</h1><p>Hãy kết nối lại để xác thực quyền và tải dữ liệu mới nhất.</p></div>;
 
   // Check role if required
   if (requiredRole !== undefined) {

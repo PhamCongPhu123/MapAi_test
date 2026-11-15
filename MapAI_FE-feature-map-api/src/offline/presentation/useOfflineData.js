@@ -30,6 +30,12 @@ export function useOfflineData() {
   }, [reload]);
 
   useEffect(() => {
+    const changed = () => { void reload().catch(e => setError(e.message)); };
+    window.addEventListener('mapai:catalog-changed', changed);
+    return () => window.removeEventListener('mapai:catalog-changed', changed);
+  }, [reload]);
+
+  useEffect(() => {
     let alive = true;
     loadPackage().then(loaded => {
       if (!alive) return;

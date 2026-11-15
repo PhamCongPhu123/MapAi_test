@@ -4,7 +4,7 @@ async function call(path, options = {}) {
   const response = await request(`/location${path}`, options);
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || error.detail || Object.values(error.errors || {}).flat().join(' ') || 'Không thể xử lý yêu cầu. Vui lòng thử lại.');
+    const failure = new Error(error.message || error.detail || Object.values(error.errors || {}).flat().join(' ') || 'Không thể xử lý yêu cầu. Vui lòng thử lại.'); failure.status = response.status; throw failure;
   }
   return response.status === 204 ? null : response.json();
 }
@@ -13,7 +13,7 @@ export const communityApi = {
   list: (signal) => call('', { signal }),
   search: (title, signal) => call(`?title=${encodeURIComponent(title)}`, { signal }),
   get: (id, signal) => call(`/${encodeURIComponent(id)}`, { signal }),
-  submit: (data) => call('/contributions', { method: 'POST', body: JSON.stringify(data) }),
+  submit: (data, id) => call('/contributions', { method: 'POST', headers: id ? { 'Idempotency-Key': id } : {}, body: JSON.stringify(data) }),
   uploadImage: async (file) => {
     const body = new FormData();
     body.append('file', file);

@@ -14,6 +14,7 @@ dist-ssr
 test-results/
 test-results-offline/
 test-results-native/
+test-results-sync/
 playwright-report/
 *.local
 .env

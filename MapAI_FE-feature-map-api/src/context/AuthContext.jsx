@@ -1,73 +1,80 @@
 import { useState, useEffect, useCallback } from "react";
 import { authApi } from "../services/authService";
 import { userApi } from "../services/userService";
-import { clearTokens, decodeToken } from "../services/api";
+import { clearTokens } from "../services/api";
 import { AuthContext } from "./authContext";
 import { isOffline, useNetworkStatus } from '../offline/network';
 import { isNative } from '../config/platform';
+import { sessionStore, syncService } from '../sync/compositionRoot';
 
 export const AuthProvider = ({ children }) => {
   const { offline } = useNetworkStatus();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => sessionStore.read()?.profile || null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const acceptUser = useCallback(async profile => {
+    if (!sessionStore.save(profile)) return null;
+    await syncService.activate(profile.id);
+    if (sessionStore.owner() !== profile.id) return null;
+    setUser(profile);
+    void syncService.sync();
+    return profile;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     const initAuth = async () => {
-      const accessToken = localStorage.getItem("accessToken");
-      // Public local exploration must not call auth APIs or discard tokens while offline.
-      if (isOffline() || (isNative && !import.meta.env.VITE_API_BASE_URL?.trim())) { setIsLoading(false); return; }
-      if (accessToken) {
+      const cached = sessionStore.read();
+      if (isOffline() || (isNative && !import.meta.env.VITE_API_BASE_URL?.trim())) {
+        setUser(cached?.profile || null);
+        await syncService.activate(cached?.profile.id);
+        if (!cancelled) setIsLoading(false);
+        return;
+      }
+      if (localStorage.getItem('accessToken')) {
         try {
-          const decoded = decodeToken(accessToken);
-          if (decoded) {
-            // Lấy thông tin cơ bản từ /auth/me khi khởi tạo
-            const userData = await authApi.getMe();
-            console.log("BE User Data (initAuth):", userData);
-            if (!cancelled) setUser(userData);
-          } else {
-            clearTokens();
+          const profile = await authApi.getMe();
+          if (!cancelled) await acceptUser(profile);
+        } catch (error) {
+          if (!cancelled) {
+            if ([401, 403].includes(error.status)) { clearTokens(); setUser(null); }
+            else setUser(sessionStore.read()?.profile || null);
           }
-        } catch (e) {
-          console.error("Khởi tạo auth thất bại:", e);
-          if (!cancelled && !isOffline() && !(e instanceof TypeError)) clearTokens();
         }
       }
       if (!cancelled) setIsLoading(false);
     };
-
-    initAuth();
-    return () => { cancelled = true; };
-  }, [offline]);
+    void initAuth();
+    const cleared = () => { setUser(null); void syncService.activate('guest'); };
+    const timer = setInterval(() => {
+      if (isOffline() && !sessionStore.read()) cleared();
+    }, 1000);
+    const switched = event => { if (['accessToken', 'mapai-verified-session'].includes(event.key)) { const cached = sessionStore.read(); setUser(cached?.profile || null); } };
+    window.addEventListener('storage', switched);
+    window.addEventListener('mapai:session-cleared', cleared);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('storage', switched); window.removeEventListener('mapai:session-cleared', cleared); };
+  }, [offline, acceptUser]);
 
   const login = useCallback(async (email, password) => {
     await authApi.login({ email, password });
     try {
       const userData = await authApi.getMe();
-      setUser(userData);
-      return userData;
+      return await acceptUser(userData);
     } catch (error) {
       clearTokens();
       setUser(null);
       throw error;
     }
-  }, []);
+  }, [acceptUser]);
 
   const register = useCallback(async (userData) => {
     return await authApi.register(userData);
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await authApi.logout();
-    } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
-      setUser(null);
-      clearTokens();
-      // Xóa tất cả các dữ liệu khác nếu có
-      sessionStorage.clear();
-    }
+    if (!isOffline()) void authApi.logout().catch(() => {});
+    setUser(null); clearTokens(); sessionStorage.clear();
+    await syncService.activate('guest');
   }, []);
 
   const googleLogin = useCallback(async (idToken) => {
@@ -75,9 +82,9 @@ export const AuthProvider = ({ children }) => {
     // Dùng /auth/me ngay sau khi google login
     const userData = await authApi.getMe();
     console.log("BE User Data (googleLogin):", userData);
-    setUser(userData);
+    await acceptUser(userData);
     return data;
-  }, []);
+  }, [acceptUser]);
 
   const forgotPassword = useCallback(async (email) => {
     return await authApi.forgotPassword(email);
@@ -91,16 +98,16 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const refreshUser = useCallback(async () => {
+    if (isOffline()) return sessionStore.read()?.profile;
     try {
       // /user/infor sẽ được gọi khi vào trang Profile để lấy chi tiết
       const userData = await userApi.getProfile();
       console.log("BE User Data (refreshUser):", userData);
-      setUser(userData);
-      return userData;
+      return await acceptUser(userData);
     } catch (e) {
       console.error("Cập nhật thông tin profile (/user/infor) thất bại:", e);
     }
-  }, []);
+  }, [acceptUser]);
 
 
   return (
@@ -115,6 +122,7 @@ export const AuthProvider = ({ children }) => {
         resetPassword,
         refreshUser,
         isLoading,
+        offlineSession: offline && Boolean(user),
       }}
     >
       {children}

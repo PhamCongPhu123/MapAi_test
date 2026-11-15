@@ -9,11 +9,15 @@ npm ci
 npm run dev
 ```
 
-Khi có mạng, ứng dụng dùng tìm kiếm, dữ liệu, chỉ đường và trợ lý online. Khi mất mạng, cùng màn hình chuyển sang POI, A* và trợ lý cục bộ. Các thao tác cần tài khoản/server vẫn được kiểm tra quyền và bị khóa khi offline. Các URL cũ `/offline`, `/map/online` chuyển về `/map` và giữ query/hash.
+Khi có mạng, ứng dụng dùng tìm kiếm, dữ liệu, chỉ đường và trợ lý online. Khi mất mạng, cùng màn hình chuyển sang POI, A* và trợ lý cục bộ. Đóng góp/đánh giá offline được giữ trong hàng đợi theo tài khoản; quản trị, bảo mật tài khoản và Gemini vẫn cần mạng. Các URL cũ `/offline`, `/map/online` chuyển về `/map` và giữ query/hash.
 
 Cả hai chế độ dùng **OpenFreeMap Liberty**. Online lấy tài nguyên từ OpenFreeMap; offline dùng bản trích xuất thật gồm 157 tile đã lưu trong PMTiles, cùng style, sprite và glyph. Gói Đà Nẵng chứa 28 địa điểm và mạng đường OSM để tính tuyến, khoảng 19 MiB. Không chuyển sang MapTiler hoặc raster OpenStreetMap.
 
 Bản đồ công khai ở cả hai chế độ; đăng nhập được yêu cầu khi gửi đóng góp/đánh giá hoặc mở hồ sơ/quản trị. Chỉ có kết nối mạng chưa đủ để dùng API: cần cấu hình backend theo hướng dẫn.
+
+## Đồng bộ dữ liệu theo tài khoản
+
+Yêu thích đồng bộ hai chiều, giữ định danh khi offline, gộp dữ liệu Khách khi đăng nhập và giữ hàng đợi đóng góp/đánh giá kèm ảnh. Địa điểm đã duyệt cập nhật về thiết bị với SHA-256; lịch sử/GPS/A* vẫn cục bộ. Xem [cách triển khai, migration và demo đồng bộ](MapAI_FE-feature-map-api/docs/SYNC.md). Backend cần áp dụng migration `AddAccountSync` trước khi dùng bản mới.
 
 ## Demo offline trên web
 

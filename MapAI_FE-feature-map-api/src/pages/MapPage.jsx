@@ -20,7 +20,7 @@ const MapPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { service, mode, resource, network, hasApi, ready } = useMapSession();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [dataOpen, setDataOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const closeData = useCallback(() => setDataOpen(false), []);
@@ -429,15 +429,15 @@ const MapPage = () => {
               </button>
               <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => setDataOpen(true)} aria-label="Quản lý dữ liệu bản đồ"><Database size={16} />Dữ liệu</button>
               <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => setSavedOpen(true)}><Heart size={16} />Đã lưu / Gần đây</button>
-              <button className="community-secondary shrink-0 bg-slate-950/90" disabled={mode === 'offline'} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.startContribution(); }}>+ Thêm địa điểm</button>
-              <button className="community-secondary shrink-0 bg-slate-950/90" disabled={mode === 'offline'} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.dismissDetails(); setShowContributions(true); }}>Đóng góp của tôi</button>
+              <button className="community-secondary shrink-0 bg-slate-950/90" disabled={authLoading || (mode === 'offline' && !user)} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.startContribution(); }}>+ Thêm địa điểm</button>
+              <button className="community-secondary shrink-0 bg-slate-950/90" disabled={authLoading || mode === 'offline'} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.dismissDetails(); setShowContributions(true); }}>Đóng góp của tôi</button>
               <button aria-label="Làm mới địa điểm MapAI" className="community-secondary shrink-0 bg-slate-950/90" onClick={() => window.dispatchEvent(new Event('mapai:places-changed'))}>Làm mới</button>
             </div>
           </div>
         )}
 
         <MapLibreView 
-          mapService={service} mode={mode} localData={resource.data} personal={resource.personal}
+          mapService={service} mode={mode} localData={resource.data}
           mapRef={mapRef}
           isDirectionsMode={isDirectionsMode} 
           setIsDirectionsMode={setIsDirectionsMode}
@@ -601,6 +601,8 @@ const MapPage = () => {
       {savedOpen && <SavedPlacesDialog resource={resource} onClose={closeSaved} onSelect={place => {
         setSavedOpen(false); lastAiPlace.current = place; mapRef.current?.showPlace(place);
         mapRef.current?.flyTo({ center: [place.lng, place.lat], zoom: 16, showMarker: false });
+      }} onDirections={place => {
+        setSavedOpen(false); setIsChatCollapsed(true); mapRef.current?.startDirections(place);
       }} />}
       {!hasApi && <p className="sr-only">Bản demo chưa có URL backend; đang dùng dữ liệu cục bộ.</p>}
       {showContributions && mode === 'online' && <div className="community-overlay" role="dialog" aria-modal="true" aria-label="Đóng góp của tôi">

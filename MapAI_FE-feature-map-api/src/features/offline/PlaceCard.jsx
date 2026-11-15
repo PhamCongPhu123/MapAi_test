@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Heart, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import { localAssetUrl } from '../../offline/packageManager';
 import { categoryLabel } from '../../offline/application/constants';
+import FavoriteToggleButton from '../../sync/presentation/FavoriteToggleButton';
 import { formatDistance } from '../../offline/application/searchEngine';
 
 export function PlaceImage({ place, large = false }) {
@@ -21,7 +22,7 @@ export function PlaceImage({ place, large = false }) {
   </div>;
 }
 
-export default function PlaceCard({ place, favorite, onSelect, onFavorite, compact = false }) {
+export default function PlaceCard({ place, onSelect, onFavorite, compact = false }) {
   return <article className={`offline-place-card ${compact ? 'is-compact' : ''}`}>
     <button className="offline-place-main" onClick={() => onSelect(place)} aria-label={`Chi tiết ${place.name}`}>
       <PlaceImage place={place} />
@@ -31,7 +32,6 @@ export default function PlaceCard({ place, favorite, onSelect, onFavorite, compa
         <span className="offline-place-meta"><MapPin size={12} /> {place.district}{Number.isFinite(place.distance) && ` · ≈ ${formatDistance(place.distance)}`}</span>
       </span>
     </button>
-    {onFavorite && <button className={`offline-icon-button offline-favorite ${favorite ? 'is-saved' : ''}`} onClick={() => onFavorite(place.id)}
-      aria-label={`${favorite ? 'Bỏ lưu' : 'Lưu'} ${place.name}`} aria-pressed={favorite}><Heart size={18} fill={favorite ? 'currentColor' : 'none'} /></button>}
+    {onFavorite && <FavoriteToggleButton place={place} label={undefined} />}
   </article>;
 }

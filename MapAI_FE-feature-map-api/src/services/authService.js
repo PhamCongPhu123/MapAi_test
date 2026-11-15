@@ -52,7 +52,7 @@ export const authApi = {
 
   getMe: async () => {
     const response = await request('/auth/me');
-    if (!response.ok) throw new Error('Không thể lấy thông tin người dùng');
+    if (!response.ok) { const error = new Error('Không thể lấy thông tin người dùng'); error.status = response.status; throw error; }
     return await response.json();
   },
 
@@ -67,10 +67,11 @@ export const authApi = {
   },
 
   logout: async () => {
+    const token = localStorage.getItem('accessToken');
     try {
       await request('/auth/logout', { method: 'POST' });
     } finally {
-      clearTokens();
+      if (localStorage.getItem('accessToken') === token) clearTokens();
     }
   },
 

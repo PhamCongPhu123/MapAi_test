@@ -2,7 +2,7 @@
 
 Ứng dụng có **một màn hình `/map`**, dùng chung MapLibre, style **OpenFreeMap Liberty**, thanh tìm kiếm, chi tiết địa điểm, bảng chỉ đường và khung trợ lý. Có mạng thì dùng các dịch vụ online; mất mạng hoặc bật giả lập thì chuyển sang gói Đà Nẵng trên thiết bị. Bản đồ không được dựng lại khi đổi mạng. `/offline` và `/map/online` là liên kết tương thích, chuyển về `/map` và giữ tham số tọa độ.
 
-Xem bản đồ không cần đăng nhập. Đóng góp, đánh giá và quản lý tài khoản cần mạng và tài khoản phù hợp. Dữ liệu yêu thích/lịch sử cục bộ chưa đồng bộ tài khoản. Phản hồi API có thông tin tài khoản không được cache offline.
+Xem bản đồ không cần đăng nhập. Gửi đóng góp/đánh giá lên server và quản lý tài khoản cần mạng; tài khoản đã xác thực có thể soạn và xếp hàng đóng góp/đánh giá khi offline. Yêu thích đồng bộ theo tài khoản; lịch sử vẫn cục bộ. Xem [luồng đồng bộ mới](SYNC.md) và áp dụng migration backend trước khi dùng. Service Worker không cache phản hồi API tài khoản; hồ sơ cơ bản và snapshot được lưu có chủ đích trong phân vùng tài khoản.
 
 Android/iOS đóng gói dữ liệu cùng ứng dụng để dùng ngay lần mở đầu không có mạng. Bản demo mobile không cấu hình backend dùng dữ liệu cục bộ; bản mobile có `VITE_API_BASE_URL` tự chuyển hai chế độ theo kết nối. Xem [Capacitor](../MOBILE.md) và [Clean Architecture 3 lớp](../../ARCHITECTURE.md).
 
@@ -40,7 +40,7 @@ Nếu đã cài phiên bản cũ, dùng **Cập nhật giao diện và tải l�
 | Trợ lý | Dịch vụ AI online | Nhận diện nhu cầu/khu vực và chấm điểm từ khóa, hỏi lại khi thiếu khu vực |
 | Định vị | GPS thiết bị | GPS thiết bị nếu có tín hiệu; luôn có mốc/chọn điểm trên bản đồ |
 | Quản lý dữ liệu | Tải/đồng bộ gói, kiểm tra SHA-256, ưu tiên giữ dữ liệu | Xem phiên bản/dung lượng, giả lập, xóa gói; app native có thể cài lại từ dữ liệu đóng gói |
-| Yêu thích/lịch sử | Lưu cục bộ các địa điểm trong gói | Cùng IndexedDB, giữ qua tải lại và xóa/cài lại gói |
+| Yêu thích/lịch sử | Yêu thích đẩy/kéo theo tài khoản; lịch sử cục bộ | Lưu ngay trên thiết bị, xếp hàng yêu thích để gửi lại; giữ qua tải lại và xóa/cài lại gói |
 
 Dữ liệu cài đặt được thay trong transaction nguyên tử: một tài sản sai checksum không phá gói đang dùng. Workbox lưu giao diện và tài sản tĩnh; Dexie lưu gói và dữ liệu cá nhân. Không chuyển sang MapTiler, HOT, raster OpenStreetMap hay bản đồ demo khi OpenFreeMap gặp lỗi; thông báo có nút thử lại cùng nguồn.
 

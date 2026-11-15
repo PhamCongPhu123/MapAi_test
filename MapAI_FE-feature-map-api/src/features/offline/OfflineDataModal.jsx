@@ -3,12 +3,15 @@ import { Database, Download, RefreshCw, ShieldCheck, Trash2, WifiOff } from 'luc
 import { useNetworkStatus, setOfflineSimulation } from '../../offline/network';
 import { usePwaStatus, applyAppUpdate } from '../../offline/pwa';
 import Dialog from './Dialog';
+import { syncService } from '../../sync/compositionRoot';
+import { useSyncStatus } from '../../sync/presentation/useSyncStatus';
 import { offlineService } from '../../offline/compositionRoot';
 
 const mb = bytes => `${(bytes / 1048576).toFixed(2)} MB`;
 export default function OfflineDataModal({ resource, onClose }) {
   const { data, status, error, progress, sync, remove } = resource;
   const network = useNetworkStatus();
+  const syncState = useSyncStatus();
   const pwa = usePwaStatus();
   const [storage, setStorage] = useState(null);
   const [persistent, setPersistent] = useState(false);
@@ -26,7 +29,7 @@ export default function OfflineDataModal({ resource, onClose }) {
     <div className="offline-dialog-body">
       <div className="offline-package-hero"><Database size={30} /><div><strong>Khám phá, kể cả khi mất mạng</strong><p>Bản đồ, địa điểm và chỉ đường được lưu trên thiết bị này.</p></div></div>
       <dl className="offline-data-stats">
-        <div><dt>Gói dữ liệu</dt><dd>{data ? `${data.pkg.placeCount} địa điểm · ${mb(data.pkg.bytes)}` : 'Chưa tải'}</dd></div>
+        <div><dt>Gói dữ liệu</dt><dd>{data ? `${data.places.length} địa điểm · ${mb(data.pkg.bytes)}` : 'Chưa tải'}</dd></div>
         <div><dt>Phiên bản</dt><dd>{data?.pkg.version || '—'}</dd></div>
         <div><dt>Lần tải gần nhất</dt><dd>{data ? new Date(data.pkg.installedAt).toLocaleString('vi-VN') : '—'}</dd></div>
         <div><dt>Giao diện mở lại offline</dt><dd>{pwa.ready ? 'Đã sẵn sàng' : import.meta.env.DEV ? 'Cần chạy bản build PWA' : pwa.supported ? 'Đang lưu…' : 'Cần HTTPS và Service Worker'}</dd></div>
@@ -41,6 +44,10 @@ export default function OfflineDataModal({ resource, onClose }) {
       </button>
       {network.offline && !offlineService.embedded && <p className="offline-note">Kết nối mạng và tắt giả lập để tải hoặc đồng bộ. Bạn có thể dùng Wi-Fi để tiết kiệm dữ liệu.</p>}
       {pwa.update && <button className="offline-button" onClick={() => applyAppUpdate(true)}>Cập nhật giao diện và tải lại</button>}
+      <button className="offline-button secondary" disabled={network.offline || syncState.syncing} onClick={() => syncService.sync({ manual: true, retry: true })}><RefreshCw size={17} />Cập nhật địa điểm cộng đồng</button>
+      <p className="offline-note">Địa điểm đã duyệt được tự kiểm tra khi nhận diện được Wi-Fi. Bạn có thể cập nhật thủ công trên 4G/5G. Gói bản đồ OpenFreeMap và dữ liệu cá nhân được lưu riêng.</p>
+      {syncState.catalogVersion && <p className="offline-note">Phiên bản địa điểm: {syncState.catalogVersion.slice(0, 12)}</p>}
+      {syncState.error && <p className="offline-error" role="alert">{syncState.error}</p>}
       <div className="offline-simulator"><div><strong><WifiOff size={16} /> Giả lập Offline</strong><p>Thử tìm kiếm, hỏi trợ lý và tính đường hoàn toàn cục bộ.</p></div>
         <button role="switch" aria-checked={network.simulated} aria-label="Giả lập Offline" className={`offline-switch ${network.simulated ? 'is-on' : ''}`} onClick={() => setOfflineSimulation(!network.simulated)}><span /></button>
       </div>
@@ -51,7 +58,7 @@ export default function OfflineDataModal({ resource, onClose }) {
         if (!confirmDelete) { setConfirmDelete(true); return; }
         await remove(); setConfirmDelete(false);
       }}><Trash2 size={16} />{confirmDelete ? 'Xác nhận xóa gói bản đồ khỏi thiết bị' : 'Xóa gói bản đồ'} </button>}
-      <p className="offline-note">Yêu thích và lịch sử được giữ khi xóa gói. Dữ liệu chỉ lưu ở trình duyệt này, chưa đồng bộ lên tài khoản.</p>
+      <p className="offline-note">Yêu thích, lịch sử và bản nháp được giữ khi xóa gói. Yêu thích của tài khoản tự đồng bộ khi có mạng; lịch sử chỉ lưu trên thiết bị.</p>
     </div>
   </Dialog>;
 }

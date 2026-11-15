@@ -13,6 +13,7 @@ import { toLngLat, placesGeoJSON } from '../utils/mapCoordinates';
 import { basemapProviders, monitorBasemap } from '../services/mapBasemap';
 import { bindOpenFreeMapPackage, openFreeMapStyle } from '../map/infrastructure/openFreeMapRuntime';
 import { offlineService } from '../offline/compositionRoot';
+import { useSyncStatus } from '../sync/presentation/useSyncStatus';
 import { useAuth } from '../hooks/useAuth';
 
 // Import Components
@@ -51,8 +52,9 @@ function BasemapSelector({ value, providers, onSelect }) {
   </label>;
 }
 
-const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigating, setIsNavigating, onLocationFound, mapService, mode, localData, personal }) => {
+const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigating, setIsNavigating, onLocationFound, mapService, mode, localData }) => {
   const { user } = useAuth();
+  const { owner } = useSyncStatus();
   const session = useRef({ mode, localData });
   useLayoutEffect(() => { session.current = { mode, localData }; }, [mode, localData]);
   const offlineBinding = useRef(null);
@@ -382,7 +384,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     dismissDetails: () => { setSelectedPlace(null); setShowLocationPopup(false); },
     startContribution: () => {
       if (pickingRef.current) return;
-      if (mode === 'offline' || !user) { addToast(mode === 'offline' ? 'Gửi đóng góp cần kết nối mạng.' : 'Hãy đăng nhập để gửi địa điểm.', 'info'); return; }
+      if (!user) { addToast('Hãy đăng nhập khi có mạng để gắn bản nháp vào tài khoản.', 'info'); return; }
       const center = map.current?.getCenter() || { lat: 16.06, lng: 108.22 };
       setSelectedPlace(null);
       setContributionDraft({ title: '', coordinates: { latitude: center.lat.toFixed(6), longitude: center.lng.toFixed(6) } });
@@ -758,8 +760,6 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
           <PlaceDetailPanel 
             key={selectedPlace.id || selectedPlace.name}
             place={selectedPlace} mode={mode}
-            favorite={personal?.favorites.has(selectedPlace.localId)}
-            onFavorite={id => offlineService.toggleFavorite(id).catch(error => addToast(error.message, 'error'))}
             onClose={() => setSelectedPlace(null)} 
             onStartDirections={handleStartDirectionsFromPanel}
           />
@@ -786,7 +786,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
         onConfirm={() => { setShowLocationPopup(false); handleLocateUser(true); }}
         onCancel={() => { setShowLocationPopup(false); addToast("Bạn đã từ chối chia sẻ vị trí. Vui lòng tự chọn điểm xuất phát.", "info"); }}
       />
-      {contributionDraft && <ContributionDialog
+      {contributionDraft && <ContributionDialog key={owner}
         initialName={contributionDraft.title}
         coordinates={contributionDraft.coordinates}
         onCoordinatesChange={coordinates => setContributionDraft(draft => ({ ...draft, coordinates }))}

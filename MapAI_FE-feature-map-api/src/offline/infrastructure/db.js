@@ -6,6 +6,21 @@ db.version(1).stores({
   favorites: 'placeId, savedAt', history: 'placeId, visitedAt', routes: 'id, createdAt',
 });
 
+// Account data and public catalogue overlays survive deleting the base map package.
+db.version(2).stores({
+  accountFavorites: 'key, owner', syncOutbox: 'key, owner, notBefore', syncMeta: 'key',
+  syncDrafts: 'key, owner', serverPlaces: 'id',
+}).upgrade(async transaction => {
+  for (const favorite of await transaction.table('favorites').toArray()) {
+    const base = await transaction.table('places').get(favorite.placeId);
+    if (!base) continue;
+    const place = { key: `seed:${base.id}`, id: `offline:${base.id}`, localId: base.id, name: base.name,
+      lat: base.lat, lng: base.lng, address: base.address || '', description: base.description || '',
+      category: base.category, district: base.district || '', source: 'offline' };
+    await transaction.table('accountFavorites').put({ key: `guest|${place.key}`, owner: 'guest', place, deleted: false, updatedAt: favorite.savedAt });
+  }
+});
+
 // Favorites/history belong to this browser, independently of online accounts.
 export async function toggleFavorite(placeId) {
   await db.transaction('rw', db.favorites, async () => {

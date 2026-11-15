@@ -1,9 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useEffectEvent } from 'react';
 import { Crosshair, ImagePlus, MapPin, X } from 'lucide-react';
+import { syncService } from '../../sync/compositionRoot';
+import { useNetworkStatus } from '../../offline/network';
+import { useSyncStatus } from '../../sync/presentation/useSyncStatus';
 import { communityApi } from '../../services/communityService';
 import { getDeviceLocation, locationErrorMessage } from '../../services/deviceLocation';
 
 export default function ContributionDialog({ initialName = '', coordinates, onCoordinatesChange, picking, onPick, onClose, onSubmitted }) {
+  const { offline } = useNetworkStatus();
+  const { owner } = useSyncStatus();
+  const operationId = useRef(crypto.randomUUID());
+  const [draftReady, setDraftReady] = useState(false);
+  const [queued, setQueued] = useState(false);
+  const changeCoordinates = useEffectEvent(onCoordinatesChange);
   const [title, setTitle] = useState(initialName);
   const [address, setAddress] = useState('');
   const [category, setCategory] = useState('Cafe');
@@ -20,6 +29,34 @@ export default function ContributionDialog({ initialName = '', coordinates, onCo
     const preview = photo?.preview;
     return () => { if (preview) URL.revokeObjectURL(preview); };
   }, [photo]);
+
+  useEffect(() => {
+    let alive = true;
+    syncService.loadDraft('contribution', 'new', owner).then(draft => {
+      if (!alive) return;
+      if (draft) {
+        setTitle(draft.title || ''); setAddress(draft.address || ''); setCategory(draft.category || 'Cafe'); setDescription(draft.description || '');
+        if (draft.coordinates) changeCoordinates(draft.coordinates);
+        if (draft.photo) setPhoto({ file: draft.photo, name: draft.photoName, preview: URL.createObjectURL(draft.photo) });
+        setUploadedUrl(draft.uploadedUrl || null);
+        operationId.current = draft.operationId || crypto.randomUUID();
+      }
+      setDraftReady(true);
+    }).catch(() => { if (alive) setDraftReady(true); });
+    return () => { alive = false; };
+  }, [owner]);
+  useEffect(() => {
+    if (!draftReady || submitted) return;
+    const timer = setTimeout(() => { void syncService.saveDraft('contribution', 'new', { title, address, category, description, coordinates,
+      photo: photo?.file, photoName: photo?.file.name || photo?.name, uploadedUrl, operationId: operationId.current }, owner).catch(() => setError('Chưa lưu được bản nháp trên thiết bị.')); }, 300);
+    return () => clearTimeout(timer);
+  }, [title, address, category, description, coordinates, photo, uploadedUrl, draftReady, submitted, owner]);
+
+  const flushDraft = useEffectEvent(() => {
+    if (draftReady && !submitted) void syncService.saveDraft('contribution', 'new', { title, address, category, description, coordinates,
+      photo: photo?.file, photoName: photo?.file.name || photo?.name, uploadedUrl, operationId: operationId.current }, owner).catch(() => {});
+  });
+  useEffect(() => () => flushDraft(), []);
 
   function selectPhoto(event) {
     const file = event.target.files?.[0];
@@ -61,21 +98,34 @@ export default function ContributionDialog({ initialName = '', coordinates, onCo
     }
     setBusy(true);
     setImageError('');
+    const payload = { title: title.trim(), address: address.trim(), category, description: description.trim(), latitude, longitude, thumbnail: uploadedUrl };
+    let thumbnail = uploadedUrl;
+    const saveToQueue = async () => {
+      await syncService.queue('contribution', { ...payload, thumbnail }, { expectedOwner: owner, operationId: operationId.current, photo: photo?.file || null, photoName: photo?.file.name || photo?.name });
+      await syncService.clearDraft('contribution', 'new', owner); setQueued(true); setSubmitted(true);
+    };
     try {
-      let thumbnail = uploadedUrl;
+      if (offline) {
+        await saveToQueue(); return;
+      }
       if (photo && !thumbnail) {
         try {
           thumbnail = await communityApi.uploadImage(photo.file);
           setUploadedUrl(thumbnail);
         } catch (error) {
+          if (error instanceof TypeError) { await saveToQueue(); return; }
           setImageError(error.message);
           return;
         }
       }
-      await communityApi.submit({ title: title.trim(), address: address.trim(), category, description: description.trim(), latitude, longitude, thumbnail });
+      await communityApi.submit({ ...payload, thumbnail }, operationId.current);
+      await syncService.clearDraft('contribution', 'new', owner);
       setSubmitted(true);
       onSubmitted();
-    } catch (error) { setError(error.message); }
+    } catch (error) {
+      if (error instanceof TypeError) { try { await saveToQueue(); } catch (storageError) { setError(storageError.message); } }
+      else setError(error.message);
+    }
     finally { setBusy(false); }
   }
 
@@ -88,11 +138,12 @@ export default function ContributionDialog({ initialName = '', coordinates, onCo
           <button aria-label="Đóng thêm địa điểm" disabled={busy} onClick={onClose} className="p-3 rounded-xl bg-white/5"><X size={20} /></button>
         </header>
         {submitted ? <div className="space-y-4 mt-6" role="status">
-          <p className="text-emerald-400 font-semibold">Đã gửi địa điểm, đang chờ quản trị viên duyệt.</p>
+          <p className="text-emerald-400 font-semibold">{queued ? 'Đã lưu đóng góp trên máy. Sẽ tự gửi khi có mạng.' : 'Đã gửi địa điểm, đang chờ quản trị viên duyệt.'}</p>
           <p className="text-slate-400">Địa điểm sẽ xuất hiện trên bản đồ MapAI sau khi được duyệt. Bạn có thể theo dõi ở “Đóng góp của tôi”.</p>
           <button className="community-primary" onClick={onClose}>Hoàn tất</button>
         </div> : <form onSubmit={submit} className="space-y-4 mt-4">
-          <fieldset disabled={busy} className="space-y-4">
+          {offline && <p className="sync-session-badge">Ngoại tuyến • Bản nháp và ảnh được giữ trên thiết bị</p>}
+          <fieldset disabled={busy || !draftReady} className="space-y-4">
           <p className="text-sm text-slate-400">Chọn đúng vị trí và cung cấp thông tin thực tế. Đóng góp sẽ được kiểm tra trước khi hiển thị công khai.</p>
           <label className="community-field">Tên địa điểm<input autoFocus required minLength={2} maxLength={255} value={title} onChange={event => setTitle(event.target.value)} /></label>
           <label className="community-field">Danh mục<select value={category} onChange={event => setCategory(event.target.value)}>

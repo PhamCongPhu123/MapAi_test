@@ -7,7 +7,12 @@ export const indexedDbRepository = {
     const [assets, count] = await Promise.all([db.assets.bulkGet(pkg.assets.map(a => a.path)), db.places.count()]);
     return assets.every(Boolean) && count === pkg.placeCount;
   },
-  listPlaces: () => db.places.toArray(), readAsset: path => db.assets.get(path),
+  listPlaces: async () => {
+    const [base, server] = await Promise.all([db.places.toArray(), db.serverPlaces.toArray()]);
+    const bounds = (await db.packages.get('danang'))?.bounds;
+    const inside = p => bounds && p.lng >= bounds[0] && p.lat >= bounds[1] && p.lng <= bounds[2] && p.lat <= bounds[3];
+    return [...base, ...server.filter(inside).map(p => ({ ...p, serverId: p.id, source: 'mapai', category: /cafe|cà phê/i.test(p.category) ? 'food' : /ăn|food|restaurant/i.test(p.category) ? 'food' : 'sightseeing', tags: /cafe|cà phê/i.test(p.category) ? ['ca phe'] : [] }))];
+  }, readAsset: path => db.assets.get(path),
   async replacePackage(pkg, places, assets) {
     await db.transaction('rw', db.packages, db.assets, db.places, async () => {
       await db.assets.clear(); await db.assets.bulkPut(assets);

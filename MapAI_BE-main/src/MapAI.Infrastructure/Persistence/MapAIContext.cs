@@ -13,6 +13,9 @@ namespace MapAI.Infrastructure.Persistence
         public DbSet<LocationEntity> Locations { get; set; } = null!;
         public DbSet<LocationReviewEntity> LocationReviews { get; set; } = null!;
 
+        public DbSet<AccountFavoriteEntity> AccountFavorites { get; set; } = null!;
+        public DbSet<SyncReceiptEntity> SyncReceipts { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -29,6 +32,18 @@ namespace MapAI.Infrastructure.Persistence
                 entity.HasOne(r => r.Location).WithMany().HasForeignKey(r => r.LocationId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(r => r.User).WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
                 entity.ToTable(t => t.HasCheckConstraint("CK_LocationReviews_Rating", "\"Rating\" BETWEEN 1 AND 5"));
+            });
+
+            modelBuilder.Entity<AccountFavoriteEntity>(entity =>
+            {
+                entity.HasKey(f => new { f.UserId, f.PlaceKey });
+                entity.Property(f => f.PlaceKey).HasMaxLength(200);
+                entity.HasOne<UserEntity>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
+            });
+            modelBuilder.Entity<SyncReceiptEntity>(entity =>
+            {
+                entity.HasKey(r => new { r.UserId, r.OperationId });
+                entity.HasOne<UserEntity>().WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
             });
 
             modelBuilder.Entity<UserEntity>(entity =>

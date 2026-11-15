@@ -4,6 +4,8 @@ using System.Security.Claims;
 using MapAI.Application.Interfaces;
 using MapAI.Application.Exceptions;
 using MapAI.Domain.Models.Location;
+using MapAI.Domain.Models.Sync;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,11 +13,16 @@ namespace MapAI.API.Controllers;
 
 [ApiController]
 [Route("api/v1/location")]
-public class CommunityLocationController(ICommunityLocationService service) : ControllerBase
+public class CommunityLocationController(ICommunityLocationService service, IAccountSyncService sync) : ControllerBase
 {
     [Authorize(Policy = "UserOnly"), HttpPost("contributions")]
-    public Task<IActionResult> Submit(SubmitLocationRequest request) => Handle(async () =>
-        StatusCode(201, await service.SubmitAsync(User.FindFirstValue("id")!, request)));
+    public Task<IActionResult> Submit(SubmitLocationRequest request, [FromHeader(Name = "Idempotency-Key")] Guid? operationId) => Handle(async () =>
+    {
+        if (operationId == null) return StatusCode(201, await service.SubmitAsync(User.FindFirstValue("id")!, request));
+        var receipt = await sync.ApplyAsync(User.FindFirstValue("id")!, new SyncOperation { Id = operationId.Value, Kind = "contribution",
+            Payload = JsonSerializer.SerializeToElement(request, new JsonSerializerOptions(JsonSerializerDefaults.Web)) });
+        return StatusCode(201, new { id = receipt.ResourceId });
+    });
 
     [Authorize(Policy = "UserOnly"), HttpGet("contributions/mine")]
     public Task<IActionResult> Mine([Range(1, 100000)] int page = 1, [Range(1, 50)] int pageSize = 10) => Handle(async () =>

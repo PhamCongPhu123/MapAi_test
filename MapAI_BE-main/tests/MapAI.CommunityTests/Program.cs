@@ -162,6 +162,67 @@ try
         Send(HttpMethod.Put, $"/contributions/{concurrent}/moderation", admin, new { status = 0 }, -1),
         Send(HttpMethod.Put, $"/contributions/{concurrent}/moderation", admin, new { status = 2, note = "Vị trí cần kiểm tra" }, -1));
     Check(decisions.Count(r => r.Status == HttpStatusCode.NoContent) == 1 && decisions.Count(r => r.Status == HttpStatusCode.Conflict) == 1, "Concurrent moderation cannot overwrite a completed decision");
+    // Synchronization is tested through HTTP, real JWT ownership and real migrations.
+    async Task<JsonNode?> Sync(HttpMethod method, string path, UserEntity? actor = null, object? body = null, int expected = 200)
+    {
+        using var request = new HttpRequestMessage(method, "/api/v1/sync/" + path);
+        if (actor != null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwt.GenerateAccessToken(actor));
+        if (body != null) request.Content = JsonContent.Create(body);
+        using var response = await client.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+        Check((int)response.StatusCode == expected, $"Sync {path}: expected {expected}, got {(int)response.StatusCode}: {text}");
+        return string.IsNullOrEmpty(text) ? null : JsonNode.Parse(text);
+    }
+    object Favorite(bool deleted = false) => new { place = new { key = "seed:mi-ba-mua", localId = "mi-ba-mua", name = "Mì Quảng Bà Mua", lat = 16.06, lng = 108.22 }, deleted };
+    var favoriteId = Guid.NewGuid();
+    var favoriteOperation = new { id = favoriteId, kind = "favorite", payload = Favorite(), userId = "bob" };
+    await Sync(HttpMethod.Get, "favorites", expected: 401);
+    await Sync(HttpMethod.Post, "operations", body: favoriteOperation, expected: 401);
+    await Task.WhenAll(Sync(HttpMethod.Post, "operations", alice, favoriteOperation), Sync(HttpMethod.Post, "operations", alice, favoriteOperation));
+    var synced = (await Sync(HttpMethod.Get, "favorites", alice))!.AsArray();
+    Check(synced.Count == 1 && !synced[0]!["deleted"]!.GetValue<bool>(), "Concurrent retries of a favorite are idempotent");
+    Check((await Sync(HttpMethod.Get, "favorites", bob))!.AsArray().Count == 0, "Favorite owner cannot be spoofed by request payload");
+    await Sync(HttpMethod.Post, "operations", alice, new { id = favoriteId, kind = "favorite", payload = Favorite(true) }, 409);
+    await Sync(HttpMethod.Post, "operations", alice, new { id = Guid.NewGuid(), kind = "favorite", payload = Favorite(true) });
+    Check((await Sync(HttpMethod.Get, "favorites", alice))![0]!["deleted"]!.GetValue<bool>(), "Deletion tombstones are returned to a second device");
+    await Sync(HttpMethod.Post, "operations", alice, new { id = Guid.NewGuid(), kind = "favorite", payload = new { place = new { key = "seed:bad", name = "Invalid", lat = 100, lng = 108 } } }, 400);
+    await Sync(HttpMethod.Post, "operations", alice, new { id = Guid.Empty, kind = "favorite", payload = Favorite() }, 400);
+    var queuedId = Guid.NewGuid();
+    var queued = new { id = queuedId, kind = "contribution", payload = Place("Queued cafe", 16.07) };
+    var receipts = await Task.WhenAll(Sync(HttpMethod.Post, "operations", alice, queued), Sync(HttpMethod.Post, "operations", alice, queued));
+    Check(receipts[0]!["resourceId"]!.GetValue<string>() == receipts[1]!["resourceId"]!.GetValue<string>(), "A retried queued contribution creates exactly one pending place");
+    var queuedReviewId = Guid.NewGuid();
+    var queuedReview = new { id = queuedReviewId, kind = "review", locationId = id, payload = new { rating = 4, comment = "Offline review" } };
+    await Task.WhenAll(Sync(HttpMethod.Post, "operations", alice, queuedReview), Sync(HttpMethod.Post, "operations", alice, queuedReview));
+    var queuedReviews = (await Send(HttpMethod.Get, $"/{id}/reviews", alice)).Body!;
+    Check(queuedReviews["myReview"]!["comment"]!.GetValue<string>() == "Offline review", "Queued review replays once for the authenticated account");
+    var invalidOperationId = Guid.NewGuid();
+    await Sync(HttpMethod.Post, "operations", alice, new { id = invalidOperationId, kind = "review", locationId = id, payload = new { rating = 9 } }, 400);
+    Check(!await db.SyncReceipts.AnyAsync(r => r.OperationId == invalidOperationId), "Failed validation does not commit an idempotency receipt");
+    var catalog = (await Sync(HttpMethod.Get, "catalog"))!;
+    var catalogPayload = catalog["payload"]!.GetValue<string>();
+    Check(!catalogPayload.Contains("Queued cafe"), "Pending contributions are absent from the offline public catalogue");
+    Check(catalogPayload.Contains("Cafe community") && !catalogPayload.Contains("submittedBy"), "Public catalogue contains approved fields without account data");
+    var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(catalogPayload))).ToLowerInvariant();
+    Check(digest == catalog["sha256"]!.GetValue<string>(), "Public catalogue includes a verifiable SHA-256 of the exact UTF-8 payload");
+    await Sync(HttpMethod.Get, "catalog?version=" + digest, expected: 204);
+    var pendingId = receipts[0]!["resourceId"]!.GetValue<string>();
+    await Send(HttpMethod.Put, $"/contributions/{pendingId}/moderation", admin, new { status = 0 }, 204);
+    var nextCatalog = (await Sync(HttpMethod.Get, "catalog"))!;
+    Check(nextCatalog["version"]!.GetValue<string>() != digest && nextCatalog["payload"]!.GetValue<string>().Contains("Queued cafe"), "Approving a contribution updates the public package version");
+    using (var normal = new HttpRequestMessage(HttpMethod.Post, "/api/v1/location/contributions"))
+    {
+        var operationId = Guid.NewGuid();
+        normal.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwt.GenerateAccessToken(alice));
+        normal.Headers.Add("Idempotency-Key", operationId.ToString());
+        var data = new { title = "Interrupted online submit", address = "Da Nang", category = "Cafe", description = "", latitude = 16.08, longitude = 108.22, thumbnail = (string?)null };
+        normal.Content = JsonContent.Create(data);
+        using var sent = await client.SendAsync(normal);
+        Check(sent.StatusCode == HttpStatusCode.Created, "Online contribution accepts an idempotency key");
+        var replay = await Sync(HttpMethod.Post, "operations", alice, new { id = operationId, kind = "contribution", payload = data });
+        var original = await sent.Content.ReadFromJsonAsync<JsonObject>();
+        Check(original!["id"]!.GetValue<string>() == replay!["resourceId"]!.GetValue<string>(), "Lost online response can replay through the offline queue without duplication");
+    }
     Console.WriteLine($"PASS: {passed} API/database assertions against real PostgreSQL and JWT authentication.");
 }
 finally

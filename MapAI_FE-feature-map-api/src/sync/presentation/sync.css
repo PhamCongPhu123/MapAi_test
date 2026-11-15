@@ -1,0 +1,36 @@
+:root {
+  --fav-heart-active: #e11d48; --fav-heart-bg: #ffe4e6; --fav-heart-idle: #64748b;
+  --sync-pending-dot: #f59e0b; --sync-pending-surface: #fef3c7; --sync-cloud-surface: #dcfce7; --sync-guest-surface: #e0f2fe;
+}
+.sync-favorite { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid #e2e8f0; border-radius: 50%; color: var(--fav-heart-idle); background: #ffffffe6; cursor: pointer; }
+.sync-favorite.is-saved { color: var(--fav-heart-active); background: var(--fav-heart-bg); border-color: #fecdd3; animation: sync-heart-pop 180ms cubic-bezier(.34,1.56,.64,1); }
+.sync-pending-dot { position: absolute; bottom: 9px; right: 9px; width: 6px; height: 6px; background: var(--sync-pending-dot); border: 1.5px solid white; border-radius: 50%; box-sizing: content-box; }
+.sync-status-stack { position: sticky; top: 0; z-index: 1; margin: 0 0 1rem; }
+.sync-bar, .sync-merge { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; border-radius: 12px; padding: .8rem; font-size: .8rem; line-height: 1.6; }
+.sync-bar > span { flex: 1; min-width: 120px; overflow-wrap: anywhere; }
+.sync-bar svg { flex-shrink: 0; }
+.sync-bar.is-guest { background: var(--sync-guest-surface); color: #0369a1; }
+.sync-bar.is-pending { background: var(--sync-pending-surface); color: #92400e; }
+.sync-bar.is-complete, .sync-merge { background: var(--sync-cloud-surface); color: #15803d; }
+.sync-bar button { min-height: 44px; text-decoration: underline; font-weight: 700; }
+.sync-merge { margin-top: .5rem; align-items: flex-start; }
+.sync-merge > div { flex: 1; }
+.sync-merge button { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+.sync-undo { position: fixed; bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); z-index: 6000; width: min(94vw, 440px); display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-radius: 12px; padding: .75rem 1rem; background: #0f172a; color: white; box-shadow: 0 8px 32px #0008; font-size: .85rem; }
+.sync-undo button { min-height: 44px; flex-shrink: 0; color: #fb923c; font-weight: 700; }
+.sync-session-badge, .sync-availability { display: inline-block; border-radius: 8px; padding: .3rem .5rem; font-size: .7rem; line-height: 1.5; background: #e0f2fe; color: #0369a1; }
+.sync-availability.is-limited { background: #e2e8f0; color: #475569; }
+.sync-saved-card { display: flex; gap: .75rem; border: 1px solid #ffffff20; border-radius: 16px; padding: .8rem; margin-bottom: .75rem; }
+.sync-saved-card .offline-place-image { width: 72px; height: 72px; flex-shrink: 0; }
+.sync-saved-copy { min-width: 0; flex: 1; }
+.sync-saved-copy > button { text-align: left; font-weight: 700; overflow-wrap: anywhere; }
+.sync-saved-copy p { color: #94a3b8; font-size: .8rem; overflow-wrap: anywhere; margin: .4rem 0; }
+.sync-saved-actions { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+.sync-saved-actions > button:first-child { min-height: 44px; border-radius: 10px; padding: .4rem .8rem; background: #2563eb; color: white; font-size: .8rem; }
+.sync-empty { text-align: center; padding: 2rem 1rem; color: #cbd5e1; }
+.sync-empty svg { margin: 0 auto 1rem; }
+.sync-empty h3 { font-weight: 700; margin-bottom: .5rem; }
+.sync-spin { animation: sync-spin 1200ms linear infinite; }
+@keyframes sync-heart-pop { 50% { transform: scale(1.25); } }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+@media(prefers-reduced-motion: reduce) { .sync-spin, .sync-favorite.is-saved { animation: none; } }
