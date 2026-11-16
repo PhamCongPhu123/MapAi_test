@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "postinstall": "patch-package",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -24,12 +25,15 @@
     "offline:tiles": "node scripts/build-openfreemap-package.mjs",
     "mobile:sync:offline": "node scripts/mobile.mjs offline",
     "test:architecture": "node --test tests/architecture.test.mjs",
+    "test:e2e:voice": "playwright test --config playwright.voice.config.js",
     "test:e2e:places": "playwright test --config playwright.places.config.js",
     "test:e2e:sync": "playwright test --config playwright.sync.config.js",
     "test:e2e:offline": "playwright test --config playwright.offline.config.js",
     "test:native:offline": "playwright test --config playwright.native.config.js"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "7.0.1",
+    "@capacitor-community/text-to-speech": "^8.0.2",
     "@capacitor/android": "^8.6.0",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.6.0",
@@ -66,6 +70,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "geojson-vt": "^5.0.4",
     "globals": "^17.4.0",
+    "patch-package": "^8.0.1",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
     "typescript": "~5.9.3",

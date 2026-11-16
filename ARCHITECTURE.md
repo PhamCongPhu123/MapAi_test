@@ -78,3 +78,8 @@ Backend `AccountSyncService` dùng `IAccountSyncRepository` để thực hiện 
 ## Tìm kiếm đa nguồn và lazy sync
 
 Mô hình `UnifiedPlace`/quy tắc định danh và khử trùng lặp nằm trong Domain/Application; `IUnifiedPlaceRepository` và `IUnifiedOsmSource` là các port. Infrastructure triển khai EF/PostgreSQL và adapter Photon/Overpass/Nominatim. Controller chỉ gọi use case. Frontend tách `places/application`, `places/infrastructure` (cache IndexedDB) và `places/presentation` (huy hiệu/icon); composition inject cache vào `createMapService`. Tìm kiếm và ChatAI dùng chung mô hình, không ghi database công khai. Lazy reference chỉ được tạo trong transaction của use case yêu thích/đánh giá. Chi tiết: [UNIFIED_PLACES.md](MapAI_FE-feature-map-api/docs/UNIFIED_PLACES.md).
+
+
+## ChatAI giọng nói song ngữ
+
+`voice/application` điều phối STT → luồng ChatAI chung → TTS qua các port capture/speaker/preferences/timers. Infrastructure triển khai Web Speech API hoặc Capacitor Speech Recognition/Text-to-Speech. Presentation quản lý vòng đời và điều khiển micro, VI/EN, loa. Backend nhận locale hợp lệ vi-VN/en-US, không nhận âm thanh và không thêm database giọng nói. Giữ cùng use case tìm MapAI/OSM, lazy sync và A*. Chi tiết: [VOICE_ASSISTANT.md](MapAI_FE-feature-map-api/docs/VOICE_ASSISTANT.md).

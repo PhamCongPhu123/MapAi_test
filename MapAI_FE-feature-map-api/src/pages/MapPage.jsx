@@ -1,3 +1,6 @@
+import { useVoiceAssistant } from '../voice/presentation/useVoiceAssistant';
+import { VoiceControls, SpeakerControl } from '../voice/presentation/VoiceControls';
+import { Volume2 } from 'lucide-react';
 import { SourceBadge, PlaceAvatar } from '../places/presentation/SourceBadge';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, Send, User, Sparkles, Search, ChevronRight, ChevronLeft, MessageSquare, Navigation, MapPin, Globe, X, Database, Wifi, WifiOff, Heart } from 'lucide-react';
@@ -30,6 +33,9 @@ const MapPage = () => {
   const [aiPending, setAiPending] = useState(null);
   const isAiLoading = aiPending?.mode === mode;
   const { addToast, removeToast } = useToast();
+  const voice = useVoiceAssistant();
+  const chatInputRef = useRef(null);
+  const sendLock = useRef(null);
   const [input, setInput] = useState('');
   const isMobile = useMediaQuery('(max-width: 1023px)');
   const [isChatCollapsed, setIsChatCollapsed] = useState(() => window.matchMedia('(max-width: 1023px)').matches);
@@ -42,6 +48,10 @@ const MapPage = () => {
   const chatScrollRef = useRef(null);
   const mapRef = useRef(null);
   const lastAiPlace = useRef(null);
+  useEffect(() => { if (!isChatCollapsed && ['permission', 'unsupported', 'insecure', 'offline', 'noSpeech', 'network'].includes(voice.noticeCode)) chatInputRef.current?.focus(); }, [voice.noticeCode, isChatCollapsed]);
+  useEffect(() => { if (isChatCollapsed && ['checking', 'listening'].includes(voice.phase)) voice.assistant.cancel(); }, [isChatCollapsed, voice.phase, voice.assistant]);
+  useEffect(() => { voice.assistant.cancel(); }, [mode, network.offline, voice.assistant]);
+
 
   useEffect(() => {
     const onBack = event => {
@@ -52,7 +62,7 @@ const MapPage = () => {
         event.preventDefault();
         setShowContributions(false);
       } else if (isMobile && !isChatCollapsed) {
-        event.preventDefault();
+        voice.assistant.cancel(); event.preventDefault();
         setIsChatCollapsed(true);
       } else if (isNavigating || isDirectionsMode) {
         event.preventDefault();
@@ -62,19 +72,19 @@ const MapPage = () => {
     };
     window.addEventListener('mapai:back', onBack);
     return () => window.removeEventListener('mapai:back', onBack);
-  }, [isMobile, isChatCollapsed, isNavigating, isDirectionsMode, showContributions, dataOpen, savedOpen]);
+  }, [isMobile, isChatCollapsed, isNavigating, isDirectionsMode, showContributions, dataOpen, savedOpen, voice.assistant]);
 
   // Hàm thực hiện tìm kiếm Nearby thực tế
   const executeNearbySearch = useCallback(async (query, lat, lng) => {
     if (!mapRef.current) return;
-    
+
     setIsSearchingNearby(true);
     const loadingToastId = addToast(`Đang tìm ${query} gần bạn...`, "loading", Infinity);
 
     try {
       const places = await service.nearby(query, lat, lng, 2000);
       removeToast(loadingToastId);
-      
+
       if (places && places.length > 0) {
         mapRef.current.setNearbyMarkers(places);
         setHasNearbyResults(true);
@@ -110,9 +120,9 @@ const MapPage = () => {
       const requestMode = service.mode();
       const places = await service.category(suggestion.query);
       if (requestMode !== service.mode()) { removeToast(loadingToastId); return; }
-      
+
       removeToast(loadingToastId);
-      
+
       if (places && places.length > 0) {
         mapRef.current.setNearbyMarkers(places);
         setHasNearbyResults(true);
@@ -171,36 +181,38 @@ const MapPage = () => {
     }
   };
 
-  const handleSend = async (e, textOverride = null) => {
+  const handleSend = async (e, textOverride = null, { language = voice.language } = {}) => {
     if (e) e.preventDefault();
     const messageText = textOverride || input;
-    if (!messageText.trim() || isAiLoading) return;
-    
+    if (!messageText.trim() || isAiLoading || sendLock.current?.mode === mode) return;
+    voice.assistant.cancel();
+
     const userMsg = {
       id: crypto.randomUUID(),
       type: 'user',
       text: messageText,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
-    
+
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setPendingNearbySearch(null);
     const requestMode = service.mode();
     const requestId = crypto.randomUUID();
+    sendLock.current = { id: requestId, mode: requestMode };
     setAiPending({ mode: requestMode, id: requestId });
 
     try {
       // Gọi Gemini AI
-      const response = await service.ask(messageText, messages.slice(-5), lastAiPlace.current, localContext.current);
+      const response = await service.ask(messageText, messages.slice(-5), lastAiPlace.current, localContext.current, { language });
       if (requestMode !== service.mode()) return;
       if (response.context) localContext.current = response.context;
       console.log("Raw AI Response received in MapPage:", response);
-      
+
       const aiMsg = {
         id: crypto.randomUUID(),
         type: 'ai',
-        text: [response.message, ...(response.warnings || [])].join('\n'),
+        language, text: [response.message, ...(response.warnings || [])].join('\n'),
         error: Boolean(response.error),
         errorCode: response.errorCode,
         location: response.location,
@@ -208,25 +220,27 @@ const MapPage = () => {
         suggestions: response.suggestions,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
-      
+
       setMessages(prev => [...prev, aiMsg]);
+      if (!isMapToolAction(response.action)) void voice.assistant.speak(response.message, { language, offline: network.offline });
 
       if (isMapToolAction(response.action)) {
         const searching = ['NEAREST_SEARCH', 'ROUTE_TO_NEAREST', 'SEARCH_POIS'].includes(response.action.type);
         if (searching) lastAiPlace.current = null;
         try {
           const result = await executeMapAction(response.action, {
-            map: mapRef.current, api: mapTools, getPosition: () => mapRef.current?.locateUser(true),
+            map: mapRef.current, api: mapTools, getPosition: () => mapRef.current?.locateUser(true), language,
           });
           if (result.places) setHasNearbyResults(result.places.length > 0);
           if (result.selectedPlace !== undefined) lastAiPlace.current = result.selectedPlace;
           if (response.action.type === 'ROUTE_TO_NEAREST' && isMobile) setIsChatCollapsed(true);
-          setMessages(prev => [...prev, { id: crypto.randomUUID(), type: 'ai', text: result.message, places: result.places,
+          setMessages(prev => [...prev, { id: crypto.randomUUID(), type: 'ai', language, text: result.message, places: result.places,
             suggestions: result.selectedPlace ? ['Chỉ đường đến đó', 'Xóa kết quả tìm kiếm'] : [],
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           }]);
+        void voice.assistant.speak(result.message, { language, offline: network.offline });
         } catch (error) {
-          setMessages(prev => [...prev, { id: crypto.randomUUID(), type: 'ai', text: error.message }]);
+          setMessages(prev => [...prev, { id: crypto.randomUUID(), type: 'ai', language, text: language === 'en-US' ? 'The map command could not finish. Check location access or try again.' : error.message }]);
         }
         return;
       }
@@ -259,9 +273,9 @@ const MapPage = () => {
         // 2. Bay đến địa điểm cụ thể (Tương ứng 'Location')
         if ((type?.toUpperCase() === 'LOCATION' || type?.toUpperCase() === 'FLY_TO') && (target_location || value)) {
           // Nếu value hoặc target_location đã là object có tọa độ
-          const locObj = (typeof value === 'object' && value !== null) ? value : 
+          const locObj = (typeof value === 'object' && value !== null) ? value :
                         ((typeof target_location === 'object' && target_location !== null) ? target_location : null);
-          
+
           if (locObj && locObj.lat && locObj.lng) {
             console.log("Action: Flying to provided coordinates:", locObj);
             handleFlyTo({
@@ -277,11 +291,11 @@ const MapPage = () => {
                 const place = places[0];
                 const latNum = parseFloat(place.lat || place.latitude);
                 const lngNum = parseFloat(place.lon || place.lng || place.longitude);
-                
+
                 if (!isNaN(latNum) && !isNaN(lngNum)) {
-                  handleFlyTo({ 
-                    lat: latNum, 
-                    lng: lngNum, 
+                  handleFlyTo({
+                    lat: latNum,
+                    lng: lngNum,
                     name: place.display_name || place.name || locName
                   });
                 } else {
@@ -304,7 +318,7 @@ const MapPage = () => {
               lng: parseFloat(destination.lng),
               name: destination.name || "Đích đến"
             };
-            
+
             const origin = await mapRef.current?.locateUser(true);
             if (!origin) throw new Error('Cần cấp quyền vị trí để bắt đầu chỉ đường.');
             mapRef.current.setDirections(origin, destObj);
@@ -313,25 +327,25 @@ const MapPage = () => {
             const destName = target_location || (typeof destination === 'string' ? destination : (destination?.name || value));
             console.log("Action: Searching and setting direction to name:", destName);
             setIsDirectionsMode(true);
-            
+
             service.category(destName).then(places => {
               if (places && places.length > 0) {
                 const place = places[0];
                 const latNum = parseFloat(place.lat || place.latitude);
                 const lngNum = parseFloat(place.lon || place.lng || place.longitude);
-                
+
                 if (!isNaN(latNum) && !isNaN(lngNum)) {
                   const destObj = {
                     lat: latNum,
                     lng: lngNum,
                     name: place.display_name || place.name || destName
                   };
-                  
+
                   if (mapRef.current && mapRef.current.setDestination) {
                     mapRef.current.setDestination(destObj);
                   } else {
-                    window.dispatchEvent(new CustomEvent('ai-set-destination', { 
-                      detail: destObj 
+                    window.dispatchEvent(new CustomEvent('ai-set-destination', {
+                      detail: destObj
                     }));
                   }
                   // Bay đến đích để người dùng thấy
@@ -383,7 +397,7 @@ const MapPage = () => {
         setTimeout(() => handleFlyTo(response.location), 1000);
       }
     } catch (error) {
-      const errorMessage = error.message === 'QUOTA_EXCEEDED' 
+      const errorMessage = language === 'en-US' ? 'MapAI could not process your request. Please try again.' : error.message === 'QUOTA_EXCEEDED'
         ? '🤖 Trợ lý AI đang tạm nghỉ chút (hết giới hạn miễn phí). Bạn vui lòng đợi 30 giây rồi hỏi tiếp nhé! 🙏'
         : 'Rất tiếc, tôi đang gặp chút sự cố kỹ thuật. Bạn thử hỏi lại nhé! 🛠️';
 
@@ -394,18 +408,19 @@ const MapPage = () => {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
     } finally {
+      if (sendLock.current?.id === requestId) sendLock.current = null;
       setAiPending(current => current?.id === requestId ? null : current);
     }
   };
 
   return (
     <div data-map-mode={mode} className="map-page flex h-dvh w-full bg-[#0a0a0a] text-gray-100 overflow-hidden relative">
-      
+
       {/* --- PHẦN BẢN ĐỒ --- */}
-      <motion.div 
+      <motion.div
         initial={false}
         animate={{ width: isMobile ? '100%' : (isNavigating ? 'calc(100% - 80px)' : (isChatCollapsed ? '100%' : '70%')) }}
-        className="relative shrink-0 h-full bg-[#121212] overflow-hidden"
+        onPointerDownCapture={voice.assistant.stopSpeaking} className="relative shrink-0 h-full bg-[#121212] overflow-hidden"
       >
         {!isNavigating && (
           <div className="map-search absolute top-6 left-6 z-[60] flex flex-col gap-4">
@@ -420,12 +435,12 @@ const MapPage = () => {
                 </motion.button>
               )}
             </div>
-            
+
             {/* Suggestions Row */}
-            <SearchSuggestions 
-              onSearch={handleNearbySearch} 
-              onClear={handleClearNearby} 
-              hasResults={hasNearbyResults} 
+            <SearchSuggestions
+              onSearch={handleNearbySearch}
+              onClear={handleClearNearby}
+              hasResults={hasNearbyResults}
             />
             <div className="flex gap-2 overflow-x-auto pb-1">
               <button data-testid="map-status" aria-label="Trạng thái kết nối và dữ liệu" onClick={() => setDataOpen(true)} className="community-secondary shrink-0 bg-slate-950/90 text-blue-300">
@@ -442,13 +457,13 @@ const MapPage = () => {
           </div>
         )}
 
-        <MapLibreView 
+        <MapLibreView
           mapService={service} mode={mode} localData={resource.data}
           mapRef={mapRef}
-          isDirectionsMode={isDirectionsMode} 
+          isDirectionsMode={isDirectionsMode}
           setIsDirectionsMode={setIsDirectionsMode}
           isNavigating={isNavigating}
-          setIsNavigating={setIsNavigating} 
+          setIsNavigating={setIsNavigating}
           onLocationFound={handleLocationFound}
         />
         <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_100px_rgba(0,0,0,0.8)]"></div>
@@ -457,7 +472,7 @@ const MapPage = () => {
       {/* --- NÚT TOGGLE CHAT (Ẩn khi đang dẫn đường) --- */}
       {!isNavigating && (!isMobile || isChatCollapsed) && (
         <button
-          onClick={() => setIsChatCollapsed(!isChatCollapsed)}
+          onClick={() => { voice.assistant.cancel(); setIsChatCollapsed(!isChatCollapsed); }}
           aria-label={isChatCollapsed ? 'Mở trợ lý AI' : 'Đóng trợ lý AI'}
           aria-expanded={!isChatCollapsed}
           aria-controls="map-chat"
@@ -471,13 +486,13 @@ const MapPage = () => {
       )}
 
       {/* --- PHẦN CHAT UI --- */}
-      <motion.div 
+      <motion.div
         initial={false}
         id="map-chat"
         role={isMobile ? 'dialog' : undefined}
         aria-label="Trợ lý MapAI"
         inert={(isChatCollapsed && !isNavigating) || (isMobile && isNavigating) ? true : undefined}
-        animate={{ 
+        animate={{
           width: isMobile ? '100%' : (isNavigating ? '80px' : (isChatCollapsed ? '0%' : '30%')),
           opacity: (isChatCollapsed && !isNavigating) || (isMobile && isNavigating) ? 0 : 1,
           x: isMobile ? 0 : ((isChatCollapsed && !isNavigating) ? 100 : 0),
@@ -514,10 +529,11 @@ const MapPage = () => {
                   <h1 className="text-lg font-black text-white tracking-tight uppercase italic">MapAI Assistant</h1>
                   <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping"></span>
-                    {mode === 'online' ? 'Dịch vụ online sẵn sàng' : 'Trợ lý cục bộ Đà Nẵng'}
+                    {voice.language === 'en-US' ? mode === 'online' ? 'Online services ready' : 'Da Nang offline assistant' : mode === 'online' ? 'Dịch vụ online sẵn sàng' : 'Trợ lý cục bộ Đà Nẵng'}
                   </p>
                 </div>
-                {isMobile && <button aria-label="Đóng trợ lý AI" className="p-3 rounded-xl bg-white/5" onClick={() => setIsChatCollapsed(true)}><X size={20} /></button>}
+                <SpeakerControl voice={voice} />
+                {isMobile && <button aria-label="Đóng trợ lý AI" className="p-3 rounded-xl bg-white/5" onClick={() => { voice.assistant.cancel(); setIsChatCollapsed(true); }}><X size={20} /></button>}
               </div>
             </header>
 
@@ -534,6 +550,7 @@ const MapPage = () => {
                           msg.type === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white/[0.03] border border-white/10 text-gray-200 rounded-bl-none backdrop-blur-md'
                         }`}>
                           {msg.text}
+                          {msg.type === 'ai' && <button type="button" className="voice-replay" aria-label={voice.language === 'en-US' ? 'Replay response' : 'Nghe lại câu trả lời'} onClick={() => { void voice.assistant.speak(msg.text, { language: msg.language || 'vi-VN', offline: network.offline, manual: true }); }}><Volume2 size={14} /></button>}
                           {msg.places?.length > 0 && <div className="mt-3 space-y-2">
                             {msg.places.map(place => <article key={place.canonicalId || place.id} className="p-3 rounded-xl bg-blue-500/10 border border-blue-400/20 text-xs space-y-2">
                               <div className="flex gap-2 items-center"><div className="p-3 rounded-lg bg-indigo-500/15 text-indigo-300"><PlaceAvatar place={place} size={24} /></div><div className="min-w-0"><span className="block font-semibold">{place.name}</span><SourceBadge place={place} /></div></div>
@@ -547,7 +564,7 @@ const MapPage = () => {
                             </article>)}
                           </div>}
                           {msg.location && msg.location.address && (
-                            <motion.button 
+                            <motion.button
                               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                               onClick={() => handleFlyTo(msg.location)}
                               className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-xl text-blue-400 text-[10px] font-black uppercase tracking-widest transition-all"
@@ -560,7 +577,7 @@ const MapPage = () => {
                       {msg.type === 'ai' && msg.suggestions && msg.id === messages[messages.length-1].id && !isAiLoading && (
                         <div className="flex flex-wrap gap-2 mt-2 ml-11">
                           {msg.suggestions.map((s, i) => (
-                            <button 
+                            <button
                               key={i} onClick={() => handleSend(null, s)}
                               className="px-3 py-1.5 bg-white/5 hover:bg-blue-500/20 border border-white/10 hover:border-blue-500/30 rounded-full text-[10px] text-gray-400 hover:text-blue-400 transition-all font-medium"
                             >
@@ -588,11 +605,12 @@ const MapPage = () => {
             </div>
 
             <div className="p-6 shrink-0 bg-gradient-to-t from-[#0f0f12] to-transparent">
-              <form onSubmit={handleSend} className="relative group">
+              <VoiceControls voice={voice} busy={isAiLoading} offline={network.offline} onStart={() => { void voice.assistant.start((text, language) => handleSend(null, text, { language }), { offline: network.offline }); }} />
+              <form onSubmit={event => handleSend(event)} className="relative group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-blue-500 transition-colors" />
                 <input
-                  type="text" aria-label="Hỏi trợ lý MapAI" value={input} onChange={(e) => setInput(e.target.value)} disabled={isAiLoading}
-                  placeholder="Hỏi trợ lý MapAI..."
+                  ref={chatInputRef} maxLength={2000} type="text" aria-label={voice.language === 'en-US' ? 'Ask MapAI' : 'Hỏi trợ lý MapAI'} value={input} onChange={(e) => setInput(e.target.value)} disabled={isAiLoading}
+                  placeholder={voice.language === 'en-US' ? 'Ask MapAI...' : 'Hỏi trợ lý MapAI...'}
                   className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all text-[13px] text-white placeholder:text-gray-600"
                 />
                 <button type="submit" aria-label="Gửi câu hỏi" disabled={!input.trim() || isAiLoading} className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:grayscale text-white rounded-xl transition-all shadow-lg shadow-blue-500/30">

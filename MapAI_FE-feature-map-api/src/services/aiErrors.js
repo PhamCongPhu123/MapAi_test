@@ -15,11 +15,12 @@ const messages = {
   AI_UNAVAILABLE: 'Dịch vụ AI hiện chưa sẵn sàng. Bạn có thể thử các lệnh bản đồ cơ bản.',
 };
 
-export function aiFailure(status, payload = {}) {
+export function aiFailure(status, payload = {}, language = 'vi-VN') {
   let code = payload?.code;
   // Compatibility with an older backend; never display its raw exception/body.
   if (!code && typeof payload?.error === 'string' && /API_KEY_INVALID|API_KEY_EXPIRED|API key not valid/i.test(payload.error)) code = 'AI_KEY_INVALID';
   if (!Object.hasOwn(messages, code)) code = status === 0 ? 'AI_BACKEND_UNREACHABLE' : status === 401 ? 'AI_SESSION_EXPIRED'
     : status === 429 ? 'AI_RATE_LIMITED' : status === 504 ? 'AI_TIMEOUT' : status === 400 ? 'AI_INVALID_REQUEST' : 'AI_UNAVAILABLE';
+  if (language === 'en-US') return { error: true, errorCode: code, message: code === 'AI_KEY_INVALID' ? 'The Gemini API key is invalid or expired. Update it on the backend.' : code === 'AI_RATE_LIMITED' ? 'The AI service has reached its request limit. Please try again later.' : code === 'AI_NOT_CONFIGURED' ? 'AI is not configured on the server. Basic map commands still work.' : code === 'AI_BACKEND_UNREACHABLE' ? 'The MapAI server could not be reached. Check your connection and try again.' : 'The AI service could not process your request. Please try again.', suggestions: ['Find the nearest gas station', 'Zoom in', 'My location'] };
   return { error: true, errorCode: code, message: messages[code], suggestions: ['Tìm cây xăng gần nhất', 'Phóng to bản đồ', 'Vị trí của tôi'] };
 }

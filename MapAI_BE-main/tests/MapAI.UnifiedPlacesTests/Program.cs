@@ -79,6 +79,11 @@ try
     var answer = JsonNode.Parse(await chat.Content.ReadAsStringAsync())!;
     Check(chat.IsSuccessStatusCode && answer["places"]!.AsArray().Count > 0 && answer["action"]!["type"]!.GetValue<string>() == "LOCAL_DIRECTIONS", "Chat utilities use the same federated search without Gemini");
     Check(await db.OsmPlaceReferences.CountAsync() == 0, "Chat and directions do not import OSM");
+    using var englishChat = await api.PostAsJsonAsync("/api/v1/ai/ask", new { userInput = "Directions to bus stops Viet Han", language = "en-US" });
+    var englishReply = JsonNode.Parse(await englishChat.Content.ReadAsStringAsync())!;
+    Check(englishChat.IsSuccessStatusCode && englishReply["message"]!.GetValue<string>().StartsWith("I found") && englishReply["action"]!["type"]!.GetValue<string>() == "LOCAL_DIRECTIONS", "English voice transcript reuses unified search and directions");
+    Check(await db.OsmPlaceReferences.CountAsync() == 0, "English voice search does not import OSM places");
+
     using var detail = await api.GetAsync("/api/v1/location/osm:node:100");
     Check(detail.StatusCode == HttpStatusCode.NotFound && await db.OsmPlaceReferences.CountAsync() == 0, "Browsing an unknown canonical OSM ID cannot create a DB row");
     source.Fail = true;

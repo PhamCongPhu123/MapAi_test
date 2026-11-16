@@ -51,7 +51,7 @@ public sealed class UnifiedOsmSource(HttpClient client, OsmSearchCache cache) : 
         if (category.Category != null)
         {
             var remaining = normalized.Replace(category.Alias, " ").Replace("da nang", " ").Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Where(w => !new[] { "tim", "giup", "toi", "cho", "tai", "o", "den", "chi", "duong" }.Contains(w)).ToArray();
+                .Where(w => !new[] { "tim", "giup", "toi", "cho", "tai", "o", "den", "chi", "duong", "near", "in", "at", "the", "a", "an" }.Contains(w)).ToArray();
             // A name-based geocoder and a category index complement one another. Either may be unavailable.
             async Task<List<UnifiedPlace>?> Safe(Func<Task<List<UnifiedPlace>>> action) { try { return await action(); } catch (Exception) when (!cancellationToken.IsCancellationRequested) { return null; } }
             var tagTask = Safe(() => CategoryAsync(category.Category, cancellationToken));

@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'dist-native', 'android', 'ios', 'test-results', 'test-results-offline', 'test-results-native', 'test-results-sync', 'test-results-places', 'playwright-report']),
+  globalIgnores(['dist', 'dist-native', 'android', 'ios', 'test-results', 'test-results-offline', 'test-results-native', 'test-results-sync', 'test-results-places', 'test-results-voice', 'playwright-report']),
   {
     files: ['playwright.config.js', 'tests/e2e/**/*.js'],
     languageOptions: { globals: globals.node },

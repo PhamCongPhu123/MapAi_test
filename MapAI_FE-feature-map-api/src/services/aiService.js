@@ -8,13 +8,13 @@ import { aiFailure } from './aiErrors';
  * @param {string} userInput - Câu lệnh của người dùng
  * @param {Array} chatHistory - Lịch sử trò chuyện
  */
-export const askMapAI = async (userInput, chatHistory = [], selectedLocation = null) => {
+export const askMapAI = async (userInput, chatHistory = [], selectedLocation = null, { language = 'vi-VN' } = {}) => {
   try {
     // Gọi đến API của Backend: /api/ai/ask
     const response = await request('/ai/ask', {
       method: 'POST',
       body: JSON.stringify({
-        userInput,
+        userInput, language,
         chatHistory: chatHistory.filter(msg => !msg.error && typeof msg.text === 'string' && msg.text.trim()).map(msg => ({
           role: msg.type === 'ai' ? 'model' : 'user',
           text: msg.text
@@ -25,11 +25,11 @@ export const askMapAI = async (userInput, chatHistory = [], selectedLocation = n
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
-      return aiFailure(response.status, errorData);
+      return aiFailure(response.status, errorData, language);
     }
 
     const data = await response.json().catch(() => null);
-    if (!data || typeof data.message !== 'string' || !data.message.trim()) return aiFailure(502, { code: 'AI_INVALID_RESPONSE' });
+    if (!data || typeof data.message !== 'string' || !data.message.trim()) return aiFailure(502, { code: 'AI_INVALID_RESPONSE' }, language);
 
     /**
      * Dữ liệu trả về (data) sẽ có cấu trúc:
@@ -42,6 +42,6 @@ export const askMapAI = async (userInput, chatHistory = [], selectedLocation = n
     return data;
     
   } catch {
-    return aiFailure(0);
+    return aiFailure(0, {}, language);
   }
 };

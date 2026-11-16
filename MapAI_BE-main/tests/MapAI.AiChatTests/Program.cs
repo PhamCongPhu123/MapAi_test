@@ -32,9 +32,9 @@ try
 {
     await using var factory = new AiFactory(handler, config, logger);
     using var api = factory.CreateClient();
-    async Task<JsonObject> Ask(string text, int status, string? code = null)
+    async Task<JsonObject> Ask(string text, int status, string? code = null, string language = "vi-VN")
     {
-        using var response = await api.PostAsJsonAsync("/api/v1/ai/ask", new { userInput = text, chatHistory = Array.Empty<object>() });
+        using var response = await api.PostAsJsonAsync("/api/v1/ai/ask", new { userInput = text, language, chatHistory = Array.Empty<object>() });
         var raw = await response.Content.ReadAsStringAsync();
         Check((int)response.StatusCode == status, $"AI HTTP status: expected {status}, got {(int)response.StatusCode}");
         Check(!raw.Contains(key) && !raw.Contains("raw-provider-fixture"), "API response does not expose keys or provider payloads");
@@ -89,6 +89,16 @@ try
         : Text("""{"message":"Cầu Rồng là một cây cầu tại Đà Nẵng.","suggestions":["Xem bản đồ"]}""")));
     var answer = await Ask("Giới thiệu về Cầu Rồng", 200);
     Check(answer["message"]?.GetValue<string>() == "Cầu Rồng là một cây cầu tại Đà Nẵng." && handler.Requests.Count == 2, "Valid router/detail responses reach the chat UI contract");
+
+    handler.Reset((_, _) => throw new Exception("English basic commands must not need Gemini"));
+    var englishMap = await Ask("Find the nearest gas station", 200, language: "en-US");
+    Check(englishMap["action"]?["type"]?.GetValue<string>() == "NEAREST_SEARCH" && englishMap["language"]?.GetValue<string>() == "en-US" && englishMap["message"]!.GetValue<string>().StartsWith("Searching"), "English nearest intent keeps the GPS map-tool contract and English reply");
+    Check((await Ask("Zoom in", 200, language: "en-US"))["message"]!.GetValue<string>() == "Applying your map command.", "English camera command returns English without a model call");
+    await Ask("Zoom in", 400, language: "fr-FR");
+    handler.Reset((_, _) => Task.FromResult(handler.Requests.Count == 1 ? Text("""{"category":"place_detail"}""") : Text("""{"message":"Dragon Bridge crosses the Han River in Da Nang.","suggestions":["Show map"]}""")));
+    var englishDetail = await Ask("Tell me about Dragon Bridge", 200, language: "en-US");
+    Check(englishDetail["message"]!.GetValue<string>().StartsWith("Dragon Bridge") && englishDetail["language"]!.GetValue<string>() == "en-US", "English AI detail response carries the selected locale");
+    Check(handler.Requests[1].Body.Contains("Respond only in English") && handler.Requests[1].Body.Contains("three short sentences"), "Gemini gets a system instruction for concise English replies");
 
     handler.Reset((_, _) => Task.FromResult(Google(200, """{"candidates":[{"content":{"parts":[{"thought":true,"text":"internal thought"},{"text":"{\"ok\":"},{"text":"true}"}]}}]}""")));
     using var client = new HttpClient(handler, disposeHandler: false);

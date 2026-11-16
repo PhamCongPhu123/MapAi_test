@@ -26,17 +26,34 @@ namespace MapAI.Application.Services
 
         public async Task<AiFinalResponse> AskMapAIAsync(AiRequest request)
         {
+            var result = await AskCoreAsync(request);
+            result.Language = request.Language;
+            if (request.Language == "en-US") result.Suggestions = result.Suggestions.Select(value => value
+                .Replace("Chỉ đường tới ", "Directions to ").Replace("Chỉ đường đến ", "Directions to ")
+                .Replace("Tìm ", "Find ").Replace("Xem bản đồ 3D", "Show 3D map").Replace("Xem bản đồ", "Show map")
+                .Replace("Xem thông tin du lịch", "Travel information").Replace("Xem địa điểm dọc đường", "Places along the route")
+                .Replace("Chọn phương tiện đi lại", "Choose travel mode").Replace("Những địa điểm đẹp ở Đà Nẵng", "Places to visit in Da Nang")
+                .Replace("Đến Đà Nẵng nên ăn gì?", "What should I eat in Da Nang?").Replace("Thông tin về ", "Tell me about ")).ToList();
+            return result;
+        }
+        private async Task<AiFinalResponse> AskCoreAsync(AiRequest request)
+        {
+            var en = request.Language == "en-US";
             try
             {
                 // TẦNG 1: ROUTER - Phân loại ý định
                 var route = MapCommandRouter.TryParse(request.UserInput);
+                if (route == null && _places != null) {
+                    var named = System.Text.RegularExpressions.Regex.Match(request.UserInput.Trim(), @"^(?:please\s+)?(?<verb>find|search for|look for|directions to|navigate to|take me to|route to|get directions to)\s+(?<query>.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (named.Success) return await SearchPlacesAsync(named.Groups["query"].Value, !new[] { "find", "search for", "look for" }.Contains(named.Groups["verb"].Value.ToLowerInvariant()), en);
+                }
                 if (route == null && _places != null)
                 {
                     var text = MapAI.Domain.Models.Places.UnifiedPlaceRules.Normalize(request.UserInput);
                     var utility = MapPlaceCategories.All.SelectMany(c => c.Aliases.Append(c.Id).Append(MapAI.Domain.Models.Places.UnifiedPlaceRules.Normalize(c.Name))).Any(a => (" " + text + " ").Contains(" " + a + " "));
-                    var explainer = System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(gioi thieu|lich su|vi sao|tai sao|ke ve)\b");
+                    var explainer = System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(gioi thieu|lich su|vi sao|tai sao|ke ve|tell me about|history of|why|what is)\b");
                     if (utility && !explainer)
-                        return await SearchPlacesAsync(System.Text.RegularExpressions.Regex.Replace(text, @"^(toi muon |hay |vui long )*(tim giup toi |tim cho toi |tim |cho toi |chi duong den |chi duong toi |dan duong den |dan duong toi |duong den )", ""), text.Contains("chi duong") || text.Contains("dan duong"));
+                        return await SearchPlacesAsync(System.Text.RegularExpressions.Regex.Replace(text, @"^(toi muon |hay |vui long )*(tim giup toi |tim cho toi |tim |cho toi |chi duong den |chi duong toi |dan duong den |dan duong toi |duong den )", ""), text.Contains("chi duong") || text.Contains("dan duong"), en);
                 }
                 if (route == null)
                 {
@@ -52,7 +69,7 @@ namespace MapAI.Application.Services
 
                 if (route == null)
                 {
-                    return ErrorResponse();
+                    return ErrorResponse(en);
                 }
 
                 _logger.LogInformation("AI Route Decision: {Category}, {ActionType}", route.Category, route.ActionType);
@@ -62,7 +79,7 @@ namespace MapAI.Application.Services
                 {
                     return new AiFinalResponse
                     {
-                        Message = "Bạn đang hỏi câu không liên quan. Vui lòng hỏi câu khác.",
+                        Message = Choose(en, "Bạn đang hỏi câu không liên quan. Vui lòng hỏi câu khác.", "Please ask about places, travel or the map in Da Nang."),
                         Suggestions = new List<string> { "Tìm Cầu Rồng", "Chỉ đường tới Bà Nà Hills", "Xem bản đồ 3D" }
                     };
                 }
@@ -70,16 +87,16 @@ namespace MapAI.Application.Services
                 if (route.Category == "place_detail")
                 {
                     var detailJson = await _aiRepository.CallGeminiAsync(
-                        AiPrompt.PLACE_DETAIL_SYSTEM_PROMPT,
+                        AiPrompt.PLACE_DETAIL_SYSTEM_PROMPT + (en ? "\nRespond only in English (en-US), in at most three short sentences (80 words). Keep place names unchanged. Never claim a map action or distance not provided by a tool." : "\nChỉ trả lời bằng tiếng Việt (vi-VN), tối đa ba câu ngắn (80 từ). Giữ nguyên tên riêng. Không tự khẳng định khoảng cách hoặc thao tác bản đồ chưa được công cụ xác nhận."),
                         AiPrompt.PLACE_DETAIL_SCHEMA,
                         request.UserInput,
                         request.ChatHistory
                     );
                     var detail = JsonSerializer.Deserialize<PlaceDetailResponse>(detailJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    
+
                     return new AiFinalResponse
                     {
-                        Message = detail?.Message ?? "Không thể lấy thông tin chi tiết.",
+                        Message = detail?.Message ?? Choose(en, "Không thể lấy thông tin chi tiết.", "Details are unavailable. Please try again."),
                         Suggestions = detail?.Suggestions ?? new List<string>()
                     };
                 }
@@ -89,7 +106,7 @@ namespace MapAI.Application.Services
                     return await HandleActionMapAsync(route, request);
                 }
 
-                return ErrorResponse();
+                return ErrorResponse(en);
             }
             catch (JsonException)
             {
@@ -105,8 +122,9 @@ namespace MapAI.Application.Services
         private async Task<AiFinalResponse> HandleActionMapAsync(RouterResponse route, AiRequest request)
         {
             var type = route.ActionType;
+            var en = request.Language == "en-US";
             if (_places != null && type is "Location" or "Direction" or "CityWide")
-                return await SearchPlacesAsync(route.TargetLocation ?? route.SearchQuery ?? request.UserInput, type == "Direction");
+                return await SearchPlacesAsync(route.TargetLocation ?? route.SearchQuery ?? request.UserInput, type == "Direction", en);
 
             var cameraActions = new Dictionary<string, string>
             {
@@ -114,26 +132,26 @@ namespace MapAI.Application.Services
                 ["ResetNorth"] = "RESET_NORTH", ["ClearResults"] = "CLEAR_RESULTS", ["ClearRoute"] = "CLEAR_ROUTE"
             };
             if (type != null && cameraActions.TryGetValue(type, out var cameraAction))
-                return new() { Message = "Đang thực hiện thao tác trên bản đồ.", Action = new() { Type = cameraAction } };
+                return new() { Message = Choose(en, "Đang thực hiện thao tác trên bản đồ.", "Applying your map command."), Action = new() { Type = cameraAction } };
 
             if (type == "DirectionSelected")
             {
                 var selected = request.SelectedLocation;
                 if (selected == null || !MapDistance.Valid(selected.Lat, selected.Lng))
-                    return new() { Message = "Bạn hãy tìm hoặc chọn một địa điểm trước khi yêu cầu chỉ đường đến đó." };
-                return new() { Message = $"Đang thiết lập chỉ đường đến {selected.Name}.", Action = new() { Type = "SET_DIRECTION", Destination = selected } };
+                    return new() { Message = Choose(en, "Bạn hãy tìm hoặc chọn một địa điểm trước khi yêu cầu chỉ đường đến đó.", "Find or select a place before asking for directions there.") };
+                return new() { Message = Choose(en, $"Đang thiết lập chỉ đường đến {selected.Name}.", $"Preparing directions to {selected.Name}."), Action = new() { Type = "SET_DIRECTION", Destination = selected } };
             }
 
             if (type is "Nearest" or "NearestDirection" or "Around" || (type == "Nearby" && MapPlaceCategories.Find(route.SearchQuery) != null))
             {
                 var category = MapPlaceCategories.Find(route.SearchQuery);
-                if (category == null) return new() { Message = "Bạn muốn tìm cây xăng, ATM, nhà thuốc, bệnh viện, quán ăn, cà phê, bãi đỗ xe hay trạm sạc?" };
+                if (category == null) return new() { Message = Choose(en, "Bạn muốn tìm cây xăng, ATM, nhà thuốc, bệnh viện, quán ăn, cà phê, bãi đỗ xe hay trạm sạc?", "Would you like a gas station, ATM, pharmacy, hospital, restaurant, cafe, parking or charging station?") };
                 var radius = route.RadiusMeters ?? 5000;
-                if (radius is < 100 or > 20000) return new() { Message = "Bạn hãy chọn bán kính từ 100 m đến 20 km để tìm địa điểm." };
+                if (radius is < 100 or > 20000) return new() { Message = Choose(en, "Bạn hãy chọn bán kính từ 100 m đến 20 km để tìm địa điểm.", "Choose a search radius between 100 meters and 20 kilometers.") };
                 var mode = route.TravelMode ?? "driving";
-                if (mode is not ("driving" or "bicycle" or "foot")) return new() { Message = "Bạn muốn đi ô tô, xe đạp hay đi bộ?" };
+                if (mode is not ("driving" or "bicycle" or "foot")) return new() { Message = Choose(en, "Bạn muốn đi ô tô, xe đạp hay đi bộ?", "Would you like to drive, cycle or walk?") };
                 if (type == "Around" && string.IsNullOrWhiteSpace(route.ReferenceLocation))
-                    return new() { Message = "Bạn muốn tìm quanh địa điểm nào? Hãy cho biết tên trung tâm tìm kiếm." };
+                    return new() { Message = Choose(en, "Bạn muốn tìm quanh địa điểm nào? Hãy cho biết tên trung tâm tìm kiếm.", "Which place should I search around?") };
                 AiLocation? center = null;
                 if (!string.IsNullOrWhiteSpace(route.ReferenceLocation))
                 {
@@ -141,16 +159,16 @@ namespace MapAI.Application.Services
                     var reference = locations?.FirstOrDefault();
                     if (reference == null || !double.TryParse(reference.Lat, CultureInfo.InvariantCulture, out var lat)
                         || !double.TryParse(reference.Lon, CultureInfo.InvariantCulture, out var lng) || !MapDistance.Valid(lat, lng))
-                        return new() { Message = "Chưa xác định được vị trí trung tâm bạn yêu cầu. Hãy thử tên địa điểm cụ thể hơn." };
+                        return new() { Message = Choose(en, "Chưa xác định được vị trí trung tâm bạn yêu cầu. Hãy thử tên địa điểm cụ thể hơn.", "I could not locate that reference point. Try a more specific place name.") };
                     center = new() { Name = reference.DisplayName, Lat = lat, Lng = lng };
                 }
                 if (type == "NearestDirection" && center != null)
-                    return new() { Message = "Để chỉ đường đến nơi gần nhất quanh một địa điểm khác, bạn hãy tìm quanh địa điểm đó trước, rồi chọn kết quả để chỉ đường." };
+                    return new() { Message = Choose(en, "Để chỉ đường đến nơi gần nhất quanh một địa điểm khác, bạn hãy tìm quanh địa điểm đó trước, rồi chọn kết quả để chỉ đường.", "Search around that place first, then choose a result for directions.") };
                 return new()
                 {
-                    Message = center == null ? $"Đang tìm {category.Name.ToLowerInvariant()} trong bán kính {radius / 1000.0:0.#} km từ vị trí của bạn." : $"Đang tìm {category.Name.ToLowerInvariant()} quanh {center.Name}.",
+                    Message = center == null ? Choose(en, $"Đang tìm {category.Name.ToLowerInvariant()} trong bán kính {radius / 1000.0:0.#} km từ vị trí của bạn.", $"Searching for {route.SearchQuery} within {radius / 1000.0:0.#} kilometers of your location.") : Choose(en, $"Đang tìm {category.Name.ToLowerInvariant()} quanh {center.Name}.", $"Searching for {route.SearchQuery} around {center.Name}."),
                     Action = new() { Type = type == "NearestDirection" ? "ROUTE_TO_NEAREST" : type == "Nearest" ? "NEAREST_SEARCH" : "SEARCH_POIS", Value = new { category = category.Id, radius, mode, center } },
-                    Suggestions = ["Chỉ đường đến đó", "Phóng to bản đồ", "Xóa kết quả tìm kiếm"]
+                    Suggestions = en ? ["Directions there", "Zoom in", "Clear search results"] : ["Chỉ đường đến đó", "Phóng to bản đồ", "Xóa kết quả tìm kiếm"]
                 };
             }
 
@@ -159,7 +177,7 @@ namespace MapAI.Application.Services
             {
                 return new AiFinalResponse
                 {
-                    Message = $"Dạ, em đang chuyển bản đồ sang chế độ {type} cho mình đây ạ!",
+                    Message = Choose(en, $"Dạ, em đang chuyển bản đồ sang chế độ {type} cho mình đây ạ!", $"Switching the map to {type}."),
                     Action = new AiAction { Type = "SWITCH_VIEW", Value = type },
                     Suggestions = new List<string> { "Những địa điểm đẹp ở Đà Nẵng", "Đến Đà Nẵng nên ăn gì?" }
                 };
@@ -171,13 +189,13 @@ namespace MapAI.Application.Services
                 string query = route.SearchQuery ?? request.UserInput;
                 return new AiFinalResponse
                 {
-                    Message = type == "Nearby" 
-                        ? $"Dạ, MapAI đang tìm kiếm các **{query}** ở gần bạn đây ạ!" 
-                        : $"Đang tìm kiếm các **{query}** tại Đà Nẵng.",
-                    Action = new AiAction 
-                    { 
-                        Type = type == "Nearby" ? "NEARBY_SEARCH" : "CITY_SEARCH", 
-                        Value = query 
+                    Message = type == "Nearby"
+                        ? Choose(en, $"Dạ, MapAI đang tìm kiếm các **{query}** ở gần bạn đây ạ!", $"Searching for {query} near you.")
+                        : Choose(en, $"Đang tìm kiếm các **{query}** tại Đà Nẵng.", $"Searching for {query} in Da Nang."),
+                    Action = new AiAction
+                    {
+                        Type = type == "Nearby" ? "NEARBY_SEARCH" : "CITY_SEARCH",
+                        Value = query
                     },
                     Suggestions = new List<string> { $"Tìm {query} khác", "Xem thông tin du lịch" }
                 };
@@ -193,7 +211,7 @@ namespace MapAI.Application.Services
                 {
                     return new AiFinalResponse
                     {
-                        Message = "Em không tìm thấy địa điểm này trên bản đồ. Bạn thử tên khác nhé!",
+                        Message = Choose(en, "Em không tìm thấy địa điểm này trên bản đồ. Bạn thử tên khác nhé!", "I could not find that place. Try another name."),
                         Suggestions = new List<string> { "Tìm Chợ Cồn", "Tìm Cầu Sông Hàn" }
                     };
                 }
@@ -212,7 +230,7 @@ namespace MapAI.Application.Services
 
                 return new AiFinalResponse
                 {
-                    Message = $"Đây là vị trí của **{bestMatch.DisplayName}** mà bạn đang tìm ạ!",
+                    Message = Choose(en, $"Đây là vị trí của **{bestMatch.DisplayName}** mà bạn đang tìm ạ!", $"Here is {bestMatch.DisplayName}."),
                     Location = new AiLocation
                     {
                         Name = bestMatch.DisplayName,
@@ -244,7 +262,7 @@ namespace MapAI.Application.Services
 
                     return new AiFinalResponse
                     {
-                        Message = $"Đã xác định vị trí **{bestMatch.DisplayName}**. Đang thiết lập chỉ đường; bạn có thể xem lộ trình sau khi tuyến được tính.",
+                        Message = Choose(en, $"Đã xác định vị trí **{bestMatch.DisplayName}**. Đang thiết lập chỉ đường; bạn có thể xem lộ trình sau khi tuyến được tính.", $"Found {bestMatch.DisplayName}. Preparing directions; review the route once it is calculated."),
                         Action = new AiAction
                         {
                             Type = "SET_DIRECTION",
@@ -256,34 +274,36 @@ namespace MapAI.Application.Services
 
                 return new AiFinalResponse
                 {
-                    Message = $"MapAI không tìm thấy địa điểm **{query}** để chỉ đường. Bạn thử lại nhé!",
+                    Message = Choose(en, $"MapAI không tìm thấy địa điểm **{query}** để chỉ đường. Bạn thử lại nhé!", $"I could not find {query} for directions. Try another name."),
                     Suggestions = new List<string> { "Chỉ đường tới Cầu Rồng", "Chỉ đường tới Chợ Hàn" }
                 };
             }
 
-            return ErrorResponse();
+            return ErrorResponse(en);
         }
 
-        private async Task<AiFinalResponse> SearchPlacesAsync(string query, bool directions)
+        private async Task<AiFinalResponse> SearchPlacesAsync(string query, bool directions, bool en = false)
         {
             var result = await _places!.SearchAsync(query);
             var first = result.Places.FirstOrDefault();
             return new() {
-                Message = first == null ? "Chưa tìm thấy địa điểm phù hợp tại Đà Nẵng. Bạn thử tên cụ thể hơn nhé."
-                    : first.SourceType == "openstreetmap" ? "Mình tìm thấy địa điểm từ bản đồ mở OpenStreetMap."
-                    : "Mình tìm thấy các địa điểm từ dữ liệu MapAI và OpenStreetMap.",
-                Places = result.Places, Warnings = result.Warnings,
+                Message = first == null ? Choose(en, "Chưa tìm thấy địa điểm phù hợp tại Đà Nẵng. Bạn thử tên cụ thể hơn nhé.", "No matching place was found in Da Nang. Try a more specific name.")
+                    : first.SourceType == "openstreetmap" ? Choose(en, "Mình tìm thấy địa điểm từ bản đồ mở OpenStreetMap.", "I found these places in OpenStreetMap.")
+                    : Choose(en, "Mình tìm thấy các địa điểm từ dữ liệu MapAI và OpenStreetMap.", "I found these places in MapAI and OpenStreetMap."),
+                Places = result.Places, Warnings = en ? result.Warnings.Select(w => w.Contains("OpenStreetMap tạm") ? "OpenStreetMap is unavailable; showing MapAI results." : "MapAI is unavailable; showing OpenStreetMap results.").ToList() : result.Warnings,
                 Action = directions && first != null ? new() { Type = "LOCAL_DIRECTIONS", Value = first } : null,
-                Suggestions = ["Chỉ đường đến đó", "Xóa kết quả tìm kiếm"]
+                Suggestions = en ? ["Directions there", "Clear search results"] : ["Chỉ đường đến đó", "Xóa kết quả tìm kiếm"]
             };
         }
 
-        private AiFinalResponse ErrorResponse()
+        private static string Choose(bool en, string vi, string english) => en ? english : vi;
+
+        private AiFinalResponse ErrorResponse(bool en = false)
         {
             return new AiFinalResponse
             {
-                Message = "Xin lỗi, MapAI gặp chút trục trặc khi xử lý yêu cầu.",
-                Suggestions = new List<string> { "Thử lại" }
+                Message = Choose(en, "Xin lỗi, MapAI gặp chút trục trặc khi xử lý yêu cầu.", "MapAI could not process that request. Please try again."),
+                Suggestions = en ? ["Try again"] : ["Thử lại"]
             };
         }
     }

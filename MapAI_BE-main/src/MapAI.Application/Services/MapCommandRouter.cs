@@ -11,6 +11,7 @@ public static class MapCommandRouter
 {
     private static readonly IReadOnlyDictionary<string, string> Commands = new Dictionary<string, string>
     {
+        ["zoom in"] = "ZoomIn", ["zoom out"] = "ZoomOut", ["my location"] = "Locate", ["where am i"] = "Locate", ["reset north"] = "ResetNorth", ["clear search results"] = "ClearResults", ["clear route"] = "ClearRoute", ["directions there"] = "DirectionSelected", ["navigate there"] = "DirectionSelected",
         ["phong to"] = "ZoomIn", ["phong to ban do"] = "ZoomIn", ["thu nho"] = "ZoomOut", ["thu nho ban do"] = "ZoomOut",
         ["ve vi tri cua toi"] = "Locate", ["vi tri cua toi"] = "Locate", ["toi dang o dau"] = "Locate",
         ["quay ve huong bac"] = "ResetNorth", ["dat lai huong bac"] = "ResetNorth",
@@ -22,6 +23,15 @@ public static class MapCommandRouter
     {
         var normalized = MapPlaceCategories.Normalize(input).Trim(' ', '.', '!', '?');
         if (Commands.TryGetValue(normalized, out var action)) return new() { Category = "action_map", ActionType = action };
+        var english = Regex.Match(normalized, @"^(?:(?<direction>get directions to|directions to|navigate to|take me to)|find|show|search for)?\s*(?:the )?(?:(?<nearest>nearest|closest)\s+)?(?<category>.+?)(?:\s+(?<near>near me|nearby|around me))?(?:\s+within\s+(?<radius>\d+(?:[.]\d+)?)\s*(?<unit>km|m))?$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        if (english.Success && (english.Groups["nearest"].Success || english.Groups["near"].Success)) {
+            var phrase = english.Groups["category"].Value;
+            phrase = phrase switch { "gas stations" => "gas station", "bus stops" => "bus stop", "pharmacies" => "pharmacy", "hospitals" => "hospital", "universities" => "university", "restaurants" => "restaurant", "cafes" => "cafe", "schools" => "school", "atms" => "atm", _ => phrase };
+            if (MapPlaceCategories.Find(phrase) is { } category) {
+                var englishRadius = english.Groups["radius"].Success ? double.Parse(english.Groups["radius"].Value, CultureInfo.InvariantCulture) * (english.Groups["unit"].Value == "km" ? 1000 : 1) : 5000;
+                return new() { Category = "action_map", ActionType = english.Groups["direction"].Success ? "NearestDirection" : english.Groups["nearest"].Success ? "Nearest" : "Nearby", SearchQuery = category.Id, RadiusMeters = (int)Math.Min(int.MaxValue, englishRadius), TravelMode = "driving" };
+            }
+        }
         var aliases = MapPlaceCategories.All.SelectMany(category => category.Aliases.Append(category.Id).Append(MapPlaceCategories.Normalize(category.Name)))
             .Distinct().OrderByDescending(s => s.Length).Select(Regex.Escape);
         var pattern = @"^(?:(?:toi muon|hay|vui long|ban oi)\s+)*(?<verb>tim giup toi|tim cho toi|tim|cho toi|chi duong den|chi duong toi|dan duong den|dan duong toi)?\s*(?<category>"

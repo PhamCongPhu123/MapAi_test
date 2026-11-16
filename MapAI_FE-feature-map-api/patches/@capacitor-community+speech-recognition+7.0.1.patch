@@ -1,0 +1,97 @@
+diff --git a/node_modules/@capacitor-community/speech-recognition/android/src/main/java/com/getcapacitor/community/speechrecognition/SpeechRecognition.java b/node_modules/@capacitor-community/speech-recognition/android/src/main/java/com/getcapacitor/community/speechrecognition/SpeechRecognition.java
+index a99ea69..7c02765 100644
+--- a/node_modules/@capacitor-community/speech-recognition/android/src/main/java/com/getcapacitor/community/speechrecognition/SpeechRecognition.java
++++ b/node_modules/@capacitor-community/speech-recognition/android/src/main/java/com/getcapacitor/community/speechrecognition/SpeechRecognition.java
+@@ -60,13 +60,19 @@ public class SpeechRecognition extends Plugin implements Constants {
+         Logger.info(getLogTag(), "Called for available(): " + isSpeechRecognitionAvailable());
+         boolean val = isSpeechRecognitionAvailable();
+         JSObject result = new JSObject();
+-        result.put("available", val);
++        boolean onDeviceAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(bridge.getContext());
++        result.put("available", val || onDeviceAvailable);
++        result.put("onDeviceAvailable", onDeviceAvailable);
+         call.resolve(result);
+     }
+ 
+     @PluginMethod
+     public void start(PluginCall call) {
+-        if (!isSpeechRecognitionAvailable()) {
++        boolean onDeviceOnly = call.getBoolean("onDeviceOnly", false);
++        if (onDeviceOnly && (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !SpeechRecognizer.isOnDeviceRecognitionAvailable(bridge.getContext()))) {
++            call.reject("offline"); return;
++        }
++        if (!isSpeechRecognitionAvailable() && !onDeviceOnly) {
+             call.unavailable(NOT_AVAILABLE);
+             return;
+         }
+@@ -81,16 +87,18 @@ public class SpeechRecognition extends Plugin implements Constants {
+         String prompt = call.getString("prompt", null);
+         boolean partialResults = call.getBoolean("partialResults", false);
+         boolean popup = call.getBoolean("popup", false);
+-        beginListening(language, maxResults, prompt, partialResults, popup, call);
++        beginListening(language, maxResults, prompt, partialResults, popup, onDeviceOnly, call);
+     }
+ 
+     @PluginMethod
+     public void stop(final PluginCall call) {
+-        try {
+-            stopListening();
+-        } catch (Exception ex) {
+-            call.reject(ex.getLocalizedMessage());
+-        }
++        bridge.getWebView().post(() -> {
++            try {
++                if (speechRecognizer != null) speechRecognizer.cancel();
++                listening(false);
++                call.resolve();
++            } catch (Exception error) { call.reject("Could not cancel speech recognition"); }
++        });
+     }
+ 
+     @PluginMethod
+@@ -157,6 +165,7 @@ public class SpeechRecognition extends Plugin implements Constants {
+         String prompt,
+         final boolean partialResults,
+         boolean showPopup,
++        boolean onDeviceOnly,
+         PluginCall call
+     ) {
+         Logger.info(getLogTag(), "Beginning to listen for audible speech");
+@@ -167,6 +176,7 @@ public class SpeechRecognition extends Plugin implements Constants {
+         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, maxResults);
+         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, bridge.getActivity().getPackageName());
+         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, partialResults);
++        intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, onDeviceOnly);
+         intent.putExtra("android.speech.extra.DICTATION_MODE", partialResults);
+ 
+         if (prompt != null) {
+@@ -188,7 +198,7 @@ public class SpeechRecognition extends Plugin implements Constants {
+                             speechRecognizer = null;
+                         }
+ 
+-                        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(bridge.getActivity());
++                        speechRecognizer = onDeviceOnly ? SpeechRecognizer.createOnDeviceSpeechRecognizer(bridge.getActivity()) : SpeechRecognizer.createSpeechRecognizer(bridge.getActivity());
+                         SpeechRecognitionListener listener = new SpeechRecognitionListener();
+                         listener.setCall(call);
+                         listener.setPartialResults(partialResults);
+@@ -282,6 +292,10 @@ public class SpeechRecognition extends Plugin implements Constants {
+         public void onError(int error) {
+             SpeechRecognition.this.stopListening();
+             String errorMssg = getErrorText(error);
++            String code = error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ? "permission"
++                : error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ? "network"
++                : error == 12 || error == 13 ? "unsupported" : "noSpeech";
++            notifyListeners("recognitionError", new JSObject().put("code", code));
+ 
+             if (this.call != null) {
+                 call.reject(errorMssg);
+@@ -301,6 +315,9 @@ public class SpeechRecognition extends Plugin implements Constants {
+                     } else {
+                         JSObject ret = new JSObject();
+                         ret.put("matches", jsArray);
++                        ret.put("isFinal", true);
++                        float[] confidence = results.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES);
++                        if (confidence != null && confidence.length > 0) ret.put("confidence", confidence[0]);
+                         notifyListeners("partialResults", ret);
+                     }
+                 }

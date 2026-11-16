@@ -1,3 +1,5 @@
+> ChatAI có micro, chuyển VI/EN và tự đọc phản hồi trên web/Android. Xem [hướng dẫn giọng nói và giới hạn offline](docs/VOICE_ASSISTANT.md).
+
 > Tìm kiếm và ChatAI đã dùng chung MapAI + OSM, chỉ mục tiện ích offline và lazy sync khi lưu/đánh giá. Xem [cách cập nhật database, chạy và demo](docs/UNIFIED_PLACES.md).
 
 > Cập nhật bản đồ chung: dùng `/map` cho cả online/offline, cùng component và OpenFreeMap Liberty. Hai URL cũ `/offline`, `/map/online` chuyển về `/map`; nguồn dữ liệu tự đổi theo mạng. Xem [hướng dẫn hiện tại](docs/OFFLINE.md).

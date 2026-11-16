@@ -46,6 +46,7 @@ namespace MapAI.Domain.Models.Ai
     public class AiFinalResponse
     {
         public string Message { get; set; } = string.Empty;
+        public string Language { get; set; } = "vi-VN";
         public List<string> Suggestions { get; set; } = new();
         public AiAction? Action { get; set; }
         public AiLocation? Location { get; set; }
@@ -72,6 +73,8 @@ namespace MapAI.Domain.Models.Ai
     {
         [Required, StringLength(2000)]
         public string UserInput { get; set; } = string.Empty;
+        [RegularExpression("^(vi-VN|en-US)$")]
+        public string Language { get; set; } = "vi-VN";
         public List<ChatMessage> ChatHistory { get; set; } = new();
         public AiLocation? SelectedLocation { get; set; }
     }

@@ -79,10 +79,10 @@ export function mergePlaces(input) {
 }
 export function placeSearchIntent(input) {
   const text = normalize(input), category = utilityCategory(text);
-  if (!category || /\b(gioi thieu|lich su|vi sao|tai sao|ke ve)\b/.test(text)) return null;
-  const direction = /\b(chi duong|dan duong|duong den)\b/.test(text);
-  let query = text.replace(/^(toi muon |hay |vui long )*(tim giup toi |tim cho toi |tim |cho toi |chi duong den |chi duong toi |dan duong den |dan duong toi |duong den )/, '').trim();
-  query = query.replace(/\b(gan day nhat|gan nhat|gan day|gan toi|quanh toi)\b/g, '').trim();
+  if (!category || /\b(gioi thieu|lich su|vi sao|tai sao|ke ve|tell me about|history of|why)\b/.test(text)) return null;
+  const direction = /\b(chi duong|dan duong|duong den|directions to|navigate to|take me to|route to)\b/.test(text);
+  let query = text.replace(/^(toi muon |hay |vui long )*(tim giup toi |tim cho toi |tim |cho toi |chi duong den |chi duong toi |dan duong den |dan duong toi |duong den |find |search for |look for |get directions to |directions to |navigate to |take me to |route to )/, '').trim();
+  query = query.replace(/^the /, '').replace(/\b(gan day nhat|gan nhat|gan day|gan toi|quanh toi|nearest|closest|near me|nearby|around me)\b/g, '').trim();
   if (!query) query = category.alias;
-  return { query, category: category.id, direction, near: /\b(gan nhat|gan day|gan toi|quanh toi)\b/.test(text) };
+  return { query, category: category.id, direction, near: /\b(gan nhat|gan day|gan toi|quanh toi|nearest|closest|near me|nearby|around me)\b/.test(text) };
 }
