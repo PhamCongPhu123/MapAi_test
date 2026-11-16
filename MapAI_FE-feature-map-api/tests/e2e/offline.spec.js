@@ -42,7 +42,7 @@ test('the same assistant clarifies an area, opens a local recommendation and pre
   await page.getByRole('button', { name: 'Gửi câu hỏi', exact: true }).click();
   await expect(page.getByText('Bạn muốn tìm ở khu vực nào?', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Quanh Cầu Rồng', exact: true }).click();
-  const suggestion = page.locator('#map-chat button').filter({ hasText: 'Gói Đà Nẵng' }).first();
+  const suggestion = page.locator('#map-chat article').first().getByRole('button', { name: 'Mở trên bản đồ', exact: true });
   await expect(suggestion).toBeVisible(); await suggestion.click();
   await expect(page.getByRole('button', { name: 'Dẫn đường', exact: true })).toBeVisible();
   if (info.project.name === 'mobile') {
@@ -53,13 +53,13 @@ test('the same assistant clarifies an area, opens a local recommendation and pre
   expect(calls.length).toBe(before);
 });
 
-test('empty local search and unsupported categories disclose the bounded package', async ({ page, context }) => {
+test('empty search discloses package bounds and utility categories use packaged OSM', async ({ page, context }) => {
   await setupMap(page); await readyMap(page); await context.setOffline(true);
   await page.getByRole('textbox', { name: 'Tìm địa điểm, địa chỉ', exact: true }).fill('not-an-existing-place-1234');
-  await expect(page.getByRole('status').filter({ hasText: 'Chưa có kết quả trong gói Đà Nẵng' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Chưa tìm thấy trong gói dữ liệu Offline Đà Nẵng' })).toBeVisible();
   await page.getByRole('button', { name: 'Xóa từ khóa', exact: true }).click();
   await page.getByRole('button', { name: 'Trạm xăng', exact: true }).click();
-  await expect(page.getByText('Chưa có Trạm xăng trong gói đã tải.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Tìm thấy [1-9]\d* Trạm xăng tại Đà Nẵng!/)).toBeVisible();
 });
 
 test('simulation keeps the same map and deleting/reinstalling the package preserves saved places', async ({ page, context }) => {

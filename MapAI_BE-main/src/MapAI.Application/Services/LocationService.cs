@@ -236,6 +236,10 @@ namespace MapAI.Application.Services
             return new LocationResponse
             {
                 Id = entity.Id,
+                CanonicalId = MapAI.Domain.Models.Places.UnifiedPlaceRules.FromMapai(entity).CanonicalId,
+                SourceType = entity.IsOsmReference ? "openstreetmap" : entity.IsUserContribution ? "mapai_community" : "mapai_curated",
+                OsmType = entity.IsOsmReference ? entity.OsmReferences.FirstOrDefault()?.OsmType : null,
+                OsmId = entity.IsOsmReference ? entity.OsmReferences.FirstOrDefault()?.OsmId : null,
                 IsUserContribution = entity.IsUserContribution,
                 Title = entity.Title,
                 PlaceId = entity.PlaceId,

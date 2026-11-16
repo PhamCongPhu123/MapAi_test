@@ -15,6 +15,8 @@ public sealed class SyncController(IAccountSyncService service) : ControllerBase
     public async Task<IActionResult> Apply(SyncOperation operation)
     {
         try { return Ok(await service.ApplyAsync(User.FindFirstValue("id")!, operation)); }
+        catch (HttpRequestException) { return StatusCode(503, new { message = "Chưa xác minh được địa điểm OSM. Thao tác vẫn được giữ trên thiết bị để thử lại." }); }
+        catch (TaskCanceledException) { return StatusCode(503, new { message = "Nguồn OSM phản hồi chậm. Hãy thử đồng bộ lại sau." }); }
         catch (KeyNotFoundException e) { return NotFound(new { message = e.Message }); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
         catch (CommunityConflictException e) { return Conflict(new { message = e.Message }); }

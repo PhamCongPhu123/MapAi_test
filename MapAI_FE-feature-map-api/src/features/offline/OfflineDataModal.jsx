@@ -29,7 +29,7 @@ export default function OfflineDataModal({ resource, onClose }) {
     <div className="offline-dialog-body">
       <div className="offline-package-hero"><Database size={30} /><div><strong>Khám phá, kể cả khi mất mạng</strong><p>Bản đồ, địa điểm và chỉ đường được lưu trên thiết bị này.</p></div></div>
       <dl className="offline-data-stats">
-        <div><dt>Gói dữ liệu</dt><dd>{data ? `${data.places.length} địa điểm · ${mb(data.pkg.bytes)}` : 'Chưa tải'}</dd></div>
+        <div><dt>Gói dữ liệu</dt><dd>{data ? `${data.pkg.placeCount} địa điểm tham khảo${data.pkg.osmIndex ? ` · ${data.pkg.osmIndex.count} tiện ích OSM` : ''} · ${mb(data.pkg.bytes)}` : 'Chưa tải'}</dd></div>
         <div><dt>Phiên bản</dt><dd>{data?.pkg.version || '—'}</dd></div>
         <div><dt>Lần tải gần nhất</dt><dd>{data ? new Date(data.pkg.installedAt).toLocaleString('vi-VN') : '—'}</dd></div>
         <div><dt>Giao diện mở lại offline</dt><dd>{pwa.ready ? 'Đã sẵn sàng' : import.meta.env.DEV ? 'Cần chạy bản build PWA' : pwa.supported ? 'Đang lưu…' : 'Cần HTTPS và Service Worker'}</dd></div>

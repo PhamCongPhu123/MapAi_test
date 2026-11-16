@@ -45,6 +45,10 @@ namespace MapAI.Domain.Entities
         // Flexible data for other API-specific fields
         public string? RawDataJson { get; set; } 
 
+        public string NormalizedName { get; set; } = "";
+        public bool IsOsmReference { get; set; }
+        public List<OsmPlaceReferenceEntity> OsmReferences { get; set; } = [];
+
         public LocationStatus Status { get; set; } = LocationStatus.Approved;
         public bool IsUserContribution { get; set; }
         public string? SubmittedById { get; set; }

@@ -9,14 +9,14 @@ function files(dir, extension) {
     entry.isDirectory() ? files(path.join(dir, entry.name), extension) : entry.name.endsWith(extension) ? [path.join(dir, entry.name)] : []);
 }
 test('offline business layer has no React, persistence, platform or transport dependencies', () => {
-  for (const p of ['src/offline/application', 'src/map/application', 'src/sync/application'].flatMap(dir => files(path.join(root, dir), '.js'))) {
+  for (const p of ['src/offline/application', 'src/map/application', 'src/sync/application', 'src/places/application'].flatMap(dir => files(path.join(root, dir), '.js'))) {
     const s = fs.readFileSync(p, 'utf8');
     assert.doesNotMatch(s, /from\s+['"][^'"]*(?:infrastructure|presentation|compositionRoot|react|dexie|capacitor)/, p);
     assert.doesNotMatch(s, /\b(?:indexedDB|localStorage|navigator|window|fetch)\s*[.(]/, p);
   }
 });
 test('offline presentation uses business/composition APIs rather than direct database adapters', () => {
-  for (const dir of ['src/features/offline', 'src/offline/presentation', 'src/sync/presentation']) for (const p of files(path.join(root, dir), '.js').concat(files(path.join(root, dir), '.jsx'))) {
+  for (const dir of ['src/features/offline', 'src/offline/presentation', 'src/sync/presentation', 'src/places/presentation']) for (const p of files(path.join(root, dir), '.js').concat(files(path.join(root, dir), '.jsx'))) {
     assert.doesNotMatch(fs.readFileSync(p, 'utf8'), /from\s+['"][^'"]*(?:infrastructure|dexie|\/db)['"/]/, p);
   }
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'src/pages/OfflineMapPage.jsx'), 'utf8'), /(?:indexedDB|navigator\.geolocation|new Worker|infrastructure\/)/);

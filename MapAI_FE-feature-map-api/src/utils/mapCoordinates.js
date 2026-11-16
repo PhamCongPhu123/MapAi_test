@@ -15,7 +15,7 @@ export function toLngLat(place) {
 export function placesGeoJSON(places) {
   return { type: 'FeatureCollection', features: places.flatMap(place => {
     const coordinates = toLngLat(place);
-    return coordinates ? [{ type: 'Feature', id: place.id, properties: { id: place.id, title: place.title },
+    return coordinates ? [{ type: 'Feature', id: place.id, properties: { id: place.id, title: place.title, sourceType: place.sourceType || 'mapai_curated' },
       geometry: { type: 'Point', coordinates } }] : [];
   }) };
 }

@@ -20,9 +20,11 @@
     "lint:offline": "eslint src/offline src/features/offline src/pages/OfflineMapPage.jsx scripts/*.mjs tests/unit tests/architecture.test.mjs tests/e2e/offline.spec.js tests/e2e/appearance.spec.js tests/e2e/package-integrity.spec.js tests/e2e/gps-and-sheet.spec.js playwright.offline.config.js",
     "test": "node --test tests/unit/*.test.js tests/*.test.mjs",
     "test:e2e": "playwright test",
+    "offline:pois": "node scripts/build-osm-poi-index.mjs",
     "offline:tiles": "node scripts/build-openfreemap-package.mjs",
     "mobile:sync:offline": "node scripts/mobile.mjs offline",
     "test:architecture": "node --test tests/architecture.test.mjs",
+    "test:e2e:places": "playwright test --config playwright.places.config.js",
     "test:e2e:sync": "playwright test --config playwright.sync.config.js",
     "test:e2e:offline": "playwright test --config playwright.offline.config.js",
     "test:native:offline": "playwright test --config playwright.native.config.js"

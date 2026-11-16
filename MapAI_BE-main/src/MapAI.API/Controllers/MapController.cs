@@ -10,12 +10,17 @@ namespace MapAI.API.Controllers
     {
         private readonly IMapService _mapService;
         private readonly ILogger<MapController> _logger;
+        private readonly IUnifiedPlaceService _places;
 
-        public MapController(IMapService mapService, ILogger<MapController> logger)
+        public MapController(IMapService mapService, ILogger<MapController> logger, IUnifiedPlaceService places)
         {
             _mapService = mapService;
-            _logger = logger;
+            _logger = logger; _places = places;
         }
+
+        [HttpGet("unified-search")]
+        public Task<IActionResult> UnifiedSearch([FromQuery] string q, CancellationToken cancellationToken) =>
+            ExecutePlaceTool(() => _places.SearchAsync(q ?? "", cancellationToken));
 
         [HttpGet("search")]
         public async Task<IActionResult> Search([FromQuery] string q)

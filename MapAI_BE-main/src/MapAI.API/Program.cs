@@ -60,6 +60,14 @@ builder.Services.AddScoped<IJwtRepository, JwtRepository>();
 builder.Services.AddScoped<IEmailRepository, EmailRepository>();
 builder.Services.AddScoped<IStorageRepository, StorageRepository>();
 
+builder.Services.AddSingleton<OsmSearchCache>();
+builder.Services.AddHttpClient<IUnifiedOsmSource, UnifiedOsmSource>(client => {
+    client.Timeout = TimeSpan.FromSeconds(18);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("MapAI/1.0 (+https://github.com/PhamCongPhu123/MapAi_test)");
+});
+builder.Services.AddScoped<IUnifiedPlaceRepository, UnifiedPlaceRepository>();
+builder.Services.AddScoped<IUnifiedPlaceService, UnifiedPlaceService>();
+
 // DI Services
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ITokenStoreService, TokenStoreService>();

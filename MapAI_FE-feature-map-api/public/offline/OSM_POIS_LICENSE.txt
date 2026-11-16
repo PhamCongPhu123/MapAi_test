@@ -1,0 +1,7 @@
+MapAI bounded utility index
+© OpenStreetMap contributors, ODbL 1.0. https://www.openstreetmap.org/copyright
+Source: https://api.openstreetmap.org/api/0.6/map
+Extracted: 2026-11-16T08:31:51.763983+00:00
+Bounds: 108.14, 15.97, 108.33, 16.16
+1486 public utility records. Geometry centers are bounding-box centers.
+Rebuild: npm run offline:pois (requires Internet and curl).

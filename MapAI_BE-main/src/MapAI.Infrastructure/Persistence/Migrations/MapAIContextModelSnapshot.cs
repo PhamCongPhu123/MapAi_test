@@ -104,6 +104,9 @@ namespace MapAI.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsOsmReference")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsUserContribution")
                         .HasColumnType("boolean");
 
@@ -122,6 +125,11 @@ namespace MapAI.Infrastructure.Persistence.Migrations
                     b.Property<string>("ModerationNote")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
@@ -167,6 +175,8 @@ namespace MapAI.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ModeratedById");
+
+                    b.HasIndex("NormalizedName");
 
                     b.HasIndex("SubmittedById");
 
@@ -216,6 +226,39 @@ namespace MapAI.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_LocationReviews_Rating", "\"Rating\" BETWEEN 1 AND 5");
                         });
+                });
+
+            modelBuilder.Entity("MapAI.Domain.Entities.OsmPlaceReferenceEntity", b =>
+                {
+                    b.Property<string>("CanonicalId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LocationId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OsmId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("OsmType")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CanonicalId");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("OsmType", "OsmId")
+                        .IsUnique();
+
+                    b.ToTable("OsmPlaceReferences");
                 });
 
             modelBuilder.Entity("MapAI.Domain.Entities.SyncReceiptEntity", b =>
@@ -348,6 +391,17 @@ namespace MapAI.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MapAI.Domain.Entities.OsmPlaceReferenceEntity", b =>
+                {
+                    b.HasOne("MapAI.Domain.Entities.LocationEntity", "Location")
+                        .WithMany("OsmReferences")
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+                });
+
             modelBuilder.Entity("MapAI.Domain.Entities.SyncReceiptEntity", b =>
                 {
                     b.HasOne("MapAI.Domain.Entities.UserEntity", null)
@@ -355,6 +409,11 @@ namespace MapAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MapAI.Domain.Entities.LocationEntity", b =>
+                {
+                    b.Navigation("OsmReferences");
                 });
 #pragma warning restore 612, 618
         }

@@ -49,6 +49,8 @@ namespace MapAI.Domain.Models.Ai
         public List<string> Suggestions { get; set; } = new();
         public AiAction? Action { get; set; }
         public AiLocation? Location { get; set; }
+        public List<MapAI.Domain.Models.Places.UnifiedPlace>? Places { get; set; }
+        public List<string>? Warnings { get; set; }
     }
 
     public class AiAction

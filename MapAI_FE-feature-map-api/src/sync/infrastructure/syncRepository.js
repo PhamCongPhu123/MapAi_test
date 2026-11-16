@@ -1,19 +1,20 @@
 import { liveQuery } from 'dexie';
 import { db } from '../../offline/infrastructure/db';
+import { unifiedPlace } from '../../places/application/unifiedPlace.js';
 import { localPlace } from '../../map/application/createMapService';
 const favoriteId = (owner, key) => `${owner}|${key}`;
 const jobId = (owner, key) => `${owner}|favorite:${key}`;
 
 export const syncRepository = {
   async personal(owner) {
-    const [favoriteRows, jobs, history, meta, catalog] = await Promise.all([
+    const [favoriteRows, jobs, history, meta, catalog, cached] = await Promise.all([
       db.accountFavorites.where('owner').equals(owner).toArray(), db.syncOutbox.where('owner').equals(owner).toArray(),
-      db.history.orderBy('visitedAt').reverse().toArray(), db.syncMeta.get(`account:${owner}`), db.syncMeta.get('catalog'),
+      db.history.orderBy('visitedAt').reverse().toArray(), db.syncMeta.get(`account:${owner}`), db.syncMeta.get('catalog'), db.osmCache.toArray(),
     ]);
-    return { favoriteRows, jobs, history, mergedCount: meta?.mergedCount || 0, lastSynced: meta?.lastSynced || null, catalogVersion: catalog?.version || null };
+    return { favoriteRows, jobs, history, references: Object.fromEntries([...cached, ...favoriteRows.map(r => r.place)].filter(p => p.mapaiId).map(p => [p.canonicalId || p.key, p.mapaiId])), mergedCount: meta?.mergedCount || 0, lastSynced: meta?.lastSynced || null, catalogVersion: catalog?.version || null };
   },
   watch(fn) { return liveQuery(async () => {
-    await Promise.all([db.accountFavorites.toArray(), db.syncOutbox.toArray(), db.history.toArray(), db.syncMeta.toArray()]); return true;
+    await Promise.all([db.accountFavorites.toArray(), db.syncOutbox.toArray(), db.history.toArray(), db.syncMeta.toArray(), db.osmCache.toArray()]); return true;
   }).subscribe({ next: fn, error: error => window.dispatchEvent(new CustomEvent('mapai:sync-storage-error', { detail: error.message })) }); },
   async resolvePlace(id) {
     const place = await db.places.get(String(id).replace(/^seed:|^offline:/, ''));
@@ -59,8 +60,15 @@ export const syncRepository = {
     const current = await db.syncOutbox.get(job.key);
     if (current?.id === job.id) await db.syncOutbox.update(job.key, { payload: { ...job.payload, thumbnail } });
   },
-  async ack(job) {
-    await db.transaction('rw', db.syncOutbox, db.accountFavorites, async () => {
+  async ack(job, receipt) {
+    await db.transaction('rw', db.syncOutbox, db.accountFavorites, db.osmCache, async () => {
+      const place = job.place || job.payload?.place;
+      if (receipt?.mapaiLocationId && place) {
+        const canonical = place.canonicalId || place.key, cached = await db.osmCache.get(canonical);
+        await db.osmCache.put({ ...unifiedPlace(cached || place), mapaiId: receipt.mapaiLocationId, cachedAt: Date.now() });
+        const row = await db.accountFavorites.get(favoriteId(job.owner, place.key));
+        if (row) await db.accountFavorites.update(row.key, { place: { ...row.place, mapaiId: receipt.mapaiLocationId } });
+      }
       const current = await db.syncOutbox.get(job.key);
       if (current?.id !== job.id) return;
       await db.syncOutbox.delete(job.key);

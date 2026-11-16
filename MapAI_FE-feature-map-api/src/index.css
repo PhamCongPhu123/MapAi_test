@@ -243,3 +243,15 @@ button, a, input, textarea {
 .map-page .map-search .community-secondary:disabled { opacity: .5; }
 .map-page .map-search [data-testid="map-status"] { color: #6ee7b7; border-color: #10b98140; }
 .map-page[data-map-mode="offline"] .map-search [data-testid="map-status"] { color: #fcd34d; border-color: #f59e0b40; }
+
+/* Shared source tokens across online/offline search, chat and detail sheets. */
+.source-badge { display: inline-block; font-size: 10px; font-weight: 650; line-height: 1.5; padding: 2px 6px; border-radius: 6px; margin: 3px 0; }
+.source-mapai { background: #ccfbf1; color: #0f766e; }
+.source-osm { background: #eef2ff; color: #4338ca; }
+.source-synced { background: #dcfce7; color: #15803d; }
+.osm-enrichment { padding: 14px; border: 1px dashed #64748b; border-radius: 12px; font-size: 12px; background: rgb(148 163 184 / .08); }
+
+@media (min-width: 768px) {
+  .place-detail-container { padding-top: 12rem; }
+  .place-detail-card { max-height: calc(100dvh - 13rem); }
+}

@@ -16,6 +16,15 @@ namespace MapAI.Infrastructure.Persistence
         public DbSet<AccountFavoriteEntity> AccountFavorites { get; set; } = null!;
         public DbSet<SyncReceiptEntity> SyncReceipts { get; set; } = null!;
 
+        public DbSet<OsmPlaceReferenceEntity> OsmPlaceReferences { get; set; } = null!;
+        private void NormalizeNames()
+        {
+            foreach (var entry in ChangeTracker.Entries<LocationEntity>().Where(e => e.State is EntityState.Added or EntityState.Modified))
+                entry.Entity.NormalizedName = MapAI.Domain.Models.Places.UnifiedPlaceRules.Normalize(entry.Entity.Title);
+        }
+        public override int SaveChanges(bool acceptAllChangesOnSuccess) { NormalizeNames(); return base.SaveChanges(acceptAllChangesOnSuccess); }
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default) { NormalizeNames(); return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken); }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -23,8 +32,17 @@ namespace MapAI.Infrastructure.Persistence
             modelBuilder.Entity<LocationEntity>(entity =>
             {
                 entity.HasIndex(l => new { l.Status, l.CreatedAt });
+                entity.HasIndex(l => l.NormalizedName);
+                entity.Property(l => l.NormalizedName).HasMaxLength(512);
                 entity.HasOne(l => l.SubmittedBy).WithMany().HasForeignKey(l => l.SubmittedById).OnDelete(DeleteBehavior.SetNull);
                 entity.HasOne(l => l.ModeratedBy).WithMany().HasForeignKey(l => l.ModeratedById).OnDelete(DeleteBehavior.SetNull);
+            });
+            modelBuilder.Entity<OsmPlaceReferenceEntity>(entity =>
+            {
+                entity.HasKey(r => r.CanonicalId); entity.Property(r => r.CanonicalId).HasMaxLength(64);
+                entity.Property(r => r.OsmType).HasMaxLength(8); entity.Property(r => r.OsmId).HasMaxLength(20);
+                entity.HasIndex(r => new { r.OsmType, r.OsmId }).IsUnique();
+                entity.HasOne(r => r.Location).WithMany(l => l.OsmReferences).HasForeignKey(r => r.LocationId).OnDelete(DeleteBehavior.Cascade);
             });
             modelBuilder.Entity<LocationReviewEntity>(entity =>
             {

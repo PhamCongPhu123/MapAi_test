@@ -10,6 +10,7 @@ export async function setupMap(page) {
     calls.push(url.pathname);
     let json = [];
     if (url.pathname.endsWith('/location')) json = [bridge];
+    if (url.pathname.endsWith('/map/unified-search')) json = { places: [{ ...bridge, name: bridge.title, lat: bridge.latitude, lng: bridge.longitude, canonicalId: 'mapai:bridge-server', mapaiId: 'bridge-server', sourceType: 'mapai_curated' }], warnings: [], sourceStatus: { mapai: 'ok', osm: 'ok' } };
     if (url.pathname.endsWith('/location/bridge-server')) json = bridge;
     if (url.pathname.endsWith('/reviews')) json = { items: [], myReview: null, totalCount: 0, averageRating: null };
     if (url.pathname.endsWith('/ai/ask')) json = { message: 'Phản hồi từ dịch vụ online.' };

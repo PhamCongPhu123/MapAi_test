@@ -18,7 +18,7 @@ namespace MapAI.Infrastructure.Repositories
             _context = context;
         }
 
-        private IQueryable<LocationEntity> Published() => _context.Locations.Where(l => l.Status == LocationStatus.Approved && !l.IsDeleted);
+        private IQueryable<LocationEntity> Published() => _context.Locations.Include(l => l.OsmReferences).Where(l => l.Status == LocationStatus.Approved && !l.IsDeleted);
 
         public async Task<LocationEntity?> GetByIdAsync(string id)
         {

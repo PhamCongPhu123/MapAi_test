@@ -17,11 +17,11 @@ Triển khai dựa trên tài liệu `mapai.md` do người dùng cung cấp. We
 
 ## Backend: bước cần làm khi lấy code mới
 
-Có migration mới `AddAccountSync`, tạo `AccountFavorites` và `SyncReceipts`. Không xóa hoặc tạo lại database đang dùng. Tại thư mục gốc repository, với chuỗi kết nối đúng database của bạn:
+Các migration `AddAccountSync` và `AddUnifiedOsmPlaces` tạo `AccountFavorites`, `SyncReceipts`, `OsmPlaceReferences` và chỉ mục tên không dấu. Xem [tìm kiếm MapAI + OSM và lazy sync](UNIFIED_PLACES.md). Không xóa hoặc tạo lại database đang dùng. Tại thư mục backend `MapAI_BE-main`, với chuỗi kết nối đúng database của bạn:
 
 ```powershell
-dotnet tool restore --tool-manifest MapAI_BE-main/.config/dotnet-tools.json
-dotnet ef database update --project MapAI_BE-main/src/MapAI.Infrastructure --startup-project MapAI_BE-main/src/MapAI.API
+dotnet tool restore
+dotnet tool run dotnet-ef database update --project src/MapAI.Infrastructure --startup-project src/MapAI.API
 ```
 
 Khi dùng database cloud, đặt `ConnectionStrings__DefaultConnection` trong môi trường chạy lệnh migration. Backend triển khai phải chạy mã mới; chỉ cập nhật frontend sẽ không tạo được endpoint đồng bộ. Sau đó build lại APK với API HTTPS trong `.env.mobile.local`:

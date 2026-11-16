@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, MapPin, Phone, Globe, Clock, Image as ImageIcon, ExternalLink, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
+import { SourceBadge, PlaceAvatar } from '../places/presentation/SourceBadge';
 import LocationReviews from './Community/LocationReviews';
 import { useSyncStatus } from '../sync/presentation/useSyncStatus';
 import FavoriteToggleButton from '../sync/presentation/FavoriteToggleButton';
@@ -8,6 +9,8 @@ import { offlineService } from '../offline/compositionRoot';
 
 const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }) => {
   const { owner } = useSyncStatus();
+  const reviewsRef = React.useRef(null);
+  const isOsm = place.sourceType === 'openstreetmap';
   const [localPhoto, setLocalPhoto] = useState(null);
   useEffect(() => {
     if (!place.image || !place.localId) return;
@@ -17,14 +20,14 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
   }, [place.image, place.localId]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
-  
+
   const photos = place.localId ? (localPhoto ? [localPhoto] : []) : mode === 'offline' ? [] : place.photos?.length ? place.photos : place.thumbnail ? [place.thumbnail] : [];
 
   useEffect(() => {
     if (photos.length <= 1) return;
     const interval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {  
+        if (prev >= 100) {
           setCurrentImageIndex((idx) => (idx + 1) % photos.length);
           return 0;
         }
@@ -65,7 +68,7 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
         {/* 3D Header Slider */}
         <div className="relative h-60 shrink-0 overflow-hidden group">
           <AnimatePresence mode="wait">
-            <motion.div 
+            <motion.div
               key={currentImageIndex}
               initial={{ opacity: 0, scale: 1.2 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -75,16 +78,16 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
               style={{ backgroundImage: photos.length ? `url(${photos[currentImageIndex]})` : 'none' }}
             />
           </AnimatePresence>
-          {!photos.length && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500"><MapPin size={40} /><span className="text-xs">Chưa có ảnh địa điểm</span></div>}
-          
+          {!photos.length && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500"><PlaceAvatar place={place} size={40} /><span className="text-xs">{isOsm ? 'Dữ liệu bản đồ mở OpenStreetMap' : 'Chưa có ảnh địa điểm'}</span></div>}
+
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent"></div>
-          
+
           {/* Progress Indicators */}
           <div className="absolute top-4 left-8 right-8 flex gap-1.5 z-30">
             {photos.map((_, idx) => (
               <div key={idx} className="h-0.5 flex-1 bg-white/10 rounded-full overflow-hidden">
                 {idx === currentImageIndex && (
-                  <motion.div 
+                  <motion.div
                     className="h-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]"
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
@@ -99,13 +102,13 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
           {/* Navigation Buttons */}
           {photos.length > 1 && (
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-4 z-20 pointer-events-none">
-              <button 
+              <button
                 onClick={prevImage}
                 className="p-2 bg-black/20 hover:bg-blue-500/40 backdrop-blur-md rounded-xl border border-white/5 text-white opacity-0 group-hover:opacity-100 transition-all pointer-events-auto active:scale-90"
               >
                 <ChevronLeft size={16} />
               </button>
-              <button 
+              <button
                 onClick={nextImage}
                 className="p-2 bg-black/20 hover:bg-blue-500/40 backdrop-blur-md rounded-xl border border-white/5 text-white opacity-0 group-hover:opacity-100 transition-all pointer-events-auto active:scale-90"
               >
@@ -114,7 +117,7 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
             </div>
           )}
 
-          <button 
+          <button
             onClick={onClose}
             aria-label="Đóng chi tiết địa điểm"
             className="absolute top-10 right-6 p-2 bg-slate-900/40 hover:bg-red-500/40 backdrop-blur-md rounded-xl border border-white/10 text-white transition-all z-30 group/close"
@@ -127,6 +130,7 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
             <span className="px-3 py-1 rounded-md bg-blue-500/20 border border-blue-500/30 text-[8px] font-black uppercase tracking-[0.2em] text-blue-400 mb-2 inline-block">
               {place.type || place.category || 'Địa điểm'}
             </span>
+            <SourceBadge place={place} />
             <h2 className="text-xl font-black text-white leading-tight tracking-tight uppercase drop-shadow-lg">
               {place.name}
             </h2>
@@ -155,7 +159,7 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
             </div>
           </div>
 
-          {place.cachedOnly && <p className="text-sm text-amber-200">Thông tin đã lưu trên thiết bị. Địa điểm chưa có trong gói bản đồ offline.</p>}
+          {place.cachedOnly && <p className="text-sm text-amber-200">Thông tin đã lưu trên thiết bị. Tuyến offline chỉ hỗ trợ trong vùng bản đồ đã tải.</p>}
           <div className="space-y-3">
             <div className="flex items-center gap-4 p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-all cursor-pointer group">
               <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400 group-hover:scale-110 transition-transform"><MapPin size={18} /></div>
@@ -165,18 +169,19 @@ const PlaceDetailPanel = ({ place, onClose, onStartDirections, mode = 'online' }
               </div>
             </div>
 
-            <p className="text-xs text-slate-400">{place.localId ? 'Địa điểm trong gói Đà Nẵng đã tải.' : place.isUserContribution ? 'Địa điểm do cộng đồng đóng góp, đã được quản trị viên duyệt.' : 'Địa điểm trong dữ liệu MapAI.'}</p>
+            <p className="text-xs text-slate-400">{isOsm ? '© OpenStreetMap contributors · ODbL 1.0' : place.localId ? 'Địa điểm trong gói Đà Nẵng đã tải.' : place.isUserContribution ? 'Địa điểm do cộng đồng đóng góp, đã được quản trị viên duyệt.' : 'Địa điểm trong dữ liệu MapAI.'}</p>
           </div>
           {place.localId && <div className="grid grid-cols-2 gap-3 text-xs text-slate-200"><p>Giờ tham khảo: {place.hours}</p><p>Khoảng giá: {place.price}</p></div>}
           {place.localId && <p className="text-xs text-slate-400">Thông tin tham khảo từ gói Đà Nẵng, chưa xác nhận thay đổi thực tế.</p>}
-          {place.id && !place.localId && place.source !== 'osm' && <LocationReviews key={`${owner}:${place.id}`} locationId={place.id} />}
-          {mode === 'offline' && !place.localId && <p className="text-xs text-amber-200">Đánh giá cộng đồng cần kết nối mạng.</p>}
+          {isOsm && <div className="osm-enrichment"><p>Địa điểm từ bản đồ mở OpenStreetMap. Bạn có thể bổ sung nhận xét để làm giàu dữ liệu cộng đồng MapAI.</p><p className="mt-1 text-xs">Lưu yêu thích hoặc gửi đánh giá sẽ đồng bộ bản tham chiếu khi có mạng.</p><button className="community-secondary mt-2" onClick={() => reviewsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Bổ sung nhận xét</button></div>}
+          {place.id && !place.localId && <div ref={reviewsRef}><LocationReviews key={`${owner}:${place.canonicalId || place.id}`} locationId={isOsm ? place.canonicalId : place.mapaiId || place.id} place={place} /></div>}
+
         </div>
 
         {/* Footer Actions */}
         <div className="shrink-0 p-4 bg-slate-950/80 border-t border-white/10">
           <div className="flex gap-3">
-            <motion.button 
+            <motion.button
               onClick={() => onStartDirections && onStartDirections(place)}
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}

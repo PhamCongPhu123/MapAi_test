@@ -32,7 +32,8 @@ export function useOfflineData() {
   useEffect(() => {
     const changed = () => { void reload().catch(e => setError(e.message)); };
     window.addEventListener('mapai:catalog-changed', changed);
-    return () => window.removeEventListener('mapai:catalog-changed', changed);
+    window.addEventListener('mapai:places-cache-changed', changed);
+    return () => { window.removeEventListener('mapai:catalog-changed', changed); window.removeEventListener('mapai:places-cache-changed', changed); };
   }, [reload]);
 
   useEffect(() => {
@@ -46,12 +47,12 @@ export function useOfflineData() {
   }, []);
 
   useEffect(() => {
-    if (status === 'missing' && (!offline || offlineService.embedded) && !autoAttempted.current) {
+    if ((status === 'missing' || (status === 'ready' && data && !data.pkg.osmIndex)) && (!offline || offlineService.embedded) && !autoAttempted.current) {
       autoAttempted.current = true;
       // Installation updates an external store and intentionally starts once on first connected visit.
       void sync();
     }
-  }, [status, offline, sync]);
+  }, [status, data, offline, sync]);
 
   const remove = useCallback(async () => {
     if (busy.current) return;

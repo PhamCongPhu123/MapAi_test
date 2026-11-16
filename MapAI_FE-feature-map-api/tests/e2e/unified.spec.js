@@ -31,7 +31,7 @@ test('search uses the API online, local POIs offline, and rejects delayed online
   const input = page.getByRole('textbox', { name: 'Tìm địa điểm, địa chỉ', exact: true });
   await input.fill('cau rong');
   await expect(page.getByRole('button', { name: /Cầu Rồng/ }).first()).toBeVisible();
-  expect(calls.some(path => path.endsWith('/map/search'))).toBe(true);
+  expect(calls.some(path => path.endsWith('/map/unified-search'))).toBe(true);
   await context.setOffline(true); await expect(page.getByTestId('map-status')).toContainText('Offline');
   const before = calls.length;
   await input.fill('mi quang');
@@ -40,12 +40,12 @@ test('search uses the API online, local POIs offline, and rejects delayed online
   expect(calls.length).toBe(before);
   await context.setOffline(false); await expect(page.getByTestId('map-status')).toContainText('Online');
   await page.getByRole('button', { name: 'Đóng chi tiết địa điểm' }).click();
-  await page.route('**/api/v1/map/search?**', async route => {
+  await page.route('**/api/v1/map/unified-search?**', async route => {
     await new Promise(resolve => setTimeout(resolve, 1200));
-    await route.fulfill({ json: [{ display_name: 'Kết quả cũ không được hiển thị', lat: '16.06', lon: '108.22' }] }).catch(() => {});
+    await route.fulfill({ json: { places: [{ canonicalId: 'osm:node:777', sourceType: 'openstreetmap', name: 'Kết quả cũ không được hiển thị', lat: 16.06, lng: 108.22 }], warnings: [] } }).catch(() => {});
   });
   await input.fill('delayed');
-  await page.waitForRequest('**/api/v1/map/search?**');
+  await page.waitForRequest('**/api/v1/map/unified-search?**');
   await context.setOffline(true);
   await input.fill('mi quang');
   await expect(page.getByRole('button', { name: /Mì Quảng Bà Mua/ }).first()).toBeVisible();

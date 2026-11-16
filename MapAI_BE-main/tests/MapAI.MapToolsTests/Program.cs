@@ -57,7 +57,7 @@ found = await service.FindPlacesAsync(Query());
 Check(found.Places.Count == 1 && found.Warnings.Count == 1, "Provider failure returns local results with a partial-data warning");
 locations.Fail = true;
 await Throws<HttpRequestException>(() => service.FindPlacesAsync(Query()), "Both sources unavailable is an error, not a false empty result");
-var controller = new MapController(service, NullLogger<MapController>.Instance);
+var controller = new MapController(service, NullLogger<MapController>.Instance, new UnusedPlaceSearch());
 var unavailable = (ObjectResult)await controller.FindNearest(Query(), CancellationToken.None);
 Check(unavailable.StatusCode == 503, "MapController exposes source outage as 503");
 locations.Fail = false; osm.Fail = false;
@@ -150,4 +150,10 @@ sealed class OverpassHandler : HttpMessageHandler
         Query = WebUtility.UrlDecode(await request.Content!.ReadAsStringAsync(cancellationToken));
         return new(HttpStatusCode.OK) { Content = new StringContent(Json, Encoding.UTF8, "application/json") };
     }
+}
+
+sealed class UnusedPlaceSearch : MapAI.Application.Interfaces.IUnifiedPlaceService
+{
+    public Task<MapAI.Domain.Models.Places.FederatedPlaceResult> SearchAsync(string query, CancellationToken token = default) => throw new Exception("GPS map tools must not use unbounded named search.");
+    public Task<MapAI.Domain.Models.Places.UnifiedPlace> ReferenceForInteractionAsync(MapAI.Domain.Models.Sync.SavedPlace place, CancellationToken token = default) => throw new Exception("GPS search must not import OSM.");
 }

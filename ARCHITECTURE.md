@@ -73,3 +73,8 @@ Business map trả cùng contract place/route cho UI. `localRoute` chuyển A* s
 `sync/application/createSyncService.js` nhận các port repository, remote, identity, clock, connectivity và checksum. `sync/compositionRoot.js` nối adapter IndexedDB/HTTP và vòng đời nền tảng. Giao diện không truy vấn IndexedDB trực tiếp. Yêu thích được ghi cùng outbox trong transaction, tombstone được giữ để truyền thao tác bỏ lưu, ACK chỉ xóa đúng UUID; dữ liệu Khách và các tài khoản không lẫn nhau.
 
 Backend `AccountSyncService` dùng `IAccountSyncRepository` để thực hiện nghiệp vụ và biên nhận idempotency. Adapter EF khóa theo tài khoản, thay đổi dữ liệu và ghi receipt trong một transaction. Controller chỉ dùng service và ID từ JWT. Migration `AddAccountSync` bổ sung bảng riêng, không sửa/xóa bảng địa điểm có sẵn. Cache catalog công khai có hash/version độc lập với snapshot tài khoản và gói nền OpenFreeMap. Xem [SYNC.md](MapAI_FE-feature-map-api/docs/SYNC.md) để biết quy tắc xung đột, hết hạn phiên và cách kiểm thử.
+
+
+## Tìm kiếm đa nguồn và lazy sync
+
+Mô hình `UnifiedPlace`/quy tắc định danh và khử trùng lặp nằm trong Domain/Application; `IUnifiedPlaceRepository` và `IUnifiedOsmSource` là các port. Infrastructure triển khai EF/PostgreSQL và adapter Photon/Overpass/Nominatim. Controller chỉ gọi use case. Frontend tách `places/application`, `places/infrastructure` (cache IndexedDB) và `places/presentation` (huy hiệu/icon); composition inject cache vào `createMapService`. Tìm kiếm và ChatAI dùng chung mô hình, không ghi database công khai. Lazy reference chỉ được tạo trong transaction của use case yêu thích/đánh giá. Chi tiết: [UNIFIED_PLACES.md](MapAI_FE-feature-map-api/docs/UNIFIED_PLACES.md).

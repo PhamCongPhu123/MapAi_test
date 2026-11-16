@@ -1,3 +1,5 @@
+> Tìm kiếm và ChatAI đã dùng chung MapAI + OSM, chỉ mục tiện ích offline và lazy sync khi lưu/đánh giá. Xem [cách cập nhật database, chạy và demo](docs/UNIFIED_PLACES.md).
+
 > Cập nhật bản đồ chung: dùng `/map` cho cả online/offline, cùng component và OpenFreeMap Liberty. Hai URL cũ `/offline`, `/map/online` chuyển về `/map`; nguồn dữ liệu tự đổi theo mạng. Xem [hướng dẫn hiện tại](docs/OFFLINE.md).
 
 Nhánh tích hợp **`work-unified`** dùng chung online, offline và Capacitor. Xem [kiến trúc 3 lớp](../ARCHITECTURE.md) và [demo trên điện thoại](MOBILE.md).

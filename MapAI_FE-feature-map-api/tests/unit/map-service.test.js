@@ -21,14 +21,15 @@ function fixture() {
 }
 test('the same service switches transport without recreating its interface or calling the server offline', async () => {
   const f = fixture();
-  assert.equal(await f.service.search('mi quang'), f.online);
+  const response = await f.service.search('mi quang');
+  assert.equal(response[0].id, f.online[0].id); assert.equal(response[0].canonicalId, `mapai:${f.online[0].id}`);
   f.setMode('offline');
   const result = await f.service.search('mi quang');
   assert.equal(result.length, 2);
   assert.ok(result.every(p => p.source === 'offline' && p.localId && Number.isFinite(p.lng)));
   assert.equal(f.calls.length, 1);
   f.setMode('online');
-  assert.equal(await f.service.search('mi quang'), f.online);
+  assert.equal((await f.service.search('mi quang'))[0].canonicalId, `mapai:${f.online[0].id}`);
   assert.equal(f.calls.length, 2);
 });
 test('local routes follow the shared route contract and unsupported offline vehicles are explained', async () => {

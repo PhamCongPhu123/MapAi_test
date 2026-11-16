@@ -1,6 +1,6 @@
 {
   "id": "danang",
-  "version": "2026.11.14.2",
+  "version": "2026.11.16.1",
   "mapProvider": "openfreemap",
   "mapStyle": "Liberty",
   "bounds": [
@@ -18,6 +18,11 @@
       "path": "OPENFREEMAP_LICENSES.txt",
       "bytes": 12173,
       "sha256": "1b6f5ce5c70b7a423b86eac9e7429720b9dfde80f576278f58c47c4bfc8bcd84"
+    },
+    {
+      "path": "OSM_POIS_LICENSE.txt",
+      "bytes": 372,
+      "sha256": "826d970d4278c084f8a83a108058028861313de91516204a0529f0504dc3a9f9"
     },
     {
       "path": "danang.pmtiles",
@@ -460,6 +465,11 @@
       "sha256": "4c7c471a54375dd5211ce79d9490ffa99fb86bfc77e4774230dcf933336044dd"
     },
     {
+      "path": "osm-pois.json",
+      "bytes": 1123162,
+      "sha256": "47d7fd5673ce4802cdb756672d519bfa658e2e0bdef6622f40e7926712ce44d2"
+    },
+    {
       "path": "places.json",
       "bytes": 14587,
       "sha256": "1c7d70756614752900c3d1d984a52bb2de0b8a58a189b11ecfb24d3dca1a3ce3"
@@ -475,5 +485,15 @@
       "sha256": "cd90d4bcb037f27e423fd802c7b226cd84c8f36a71af14391717eb7910c0f38a"
     }
   ],
-  "bytes": 19596857
+  "bytes": 20720391,
+  "osmIndex": {
+    "count": 1486,
+    "bounds": [
+      108.14,
+      15.97,
+      108.33,
+      16.16
+    ],
+    "sourceDate": "2026-11-16T08:31:51.763983+00:00"
+  }
 }

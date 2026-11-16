@@ -30,6 +30,6 @@ export const communityApi = {
 };
 
 export const toMapPlace = (location) => ({
-  ...location, name: location.title, lat: location.latitude, lng: location.longitude,
+  ...location, mapaiId: location.id, sourceType: location.sourceType || (location.isUserContribution ? 'mapai_community' : 'mapai_curated'), name: location.title, lat: location.latitude, lng: location.longitude,
   type: location.category, photos: location.images, phone: location.phoneNumber,
 });

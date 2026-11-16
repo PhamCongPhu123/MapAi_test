@@ -1,3 +1,4 @@
+import { SourceBadge, PlaceAvatar } from '../places/presentation/SourceBadge';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, Send, User, Sparkles, Search, ChevronRight, ChevronLeft, MessageSquare, Navigation, MapPin, Globe, X, Database, Wifi, WifiOff, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -199,7 +200,7 @@ const MapPage = () => {
       const aiMsg = {
         id: crypto.randomUUID(),
         type: 'ai',
-        text: response.message,
+        text: [response.message, ...(response.warnings || [])].join('\n'),
         error: Boolean(response.error),
         errorCode: response.errorCode,
         location: response.location,
@@ -230,8 +231,13 @@ const MapPage = () => {
         return;
       }
 
+      if (response.places?.length) {
+        mapRef.current?.setNearbyMarkers(response.places);
+        setHasNearbyResults(true); lastAiPlace.current = response.places[0];
+      }
       if (response.action?.type === 'LOCAL_DIRECTIONS') {
-        mapRef.current?.startDirections(response.action.value);
+        if (response.action.origin) mapRef.current?.setDirections(response.action.origin, response.action.value, response.action.mode || 'foot');
+        else mapRef.current?.startDirections(response.action.value);
         if (isMobile) setIsChatCollapsed(true);
         return;
       }
@@ -407,7 +413,7 @@ const MapPage = () => {
               <motion.button aria-label="Về trang chủ" onClick={() => navigate('/')} className="shrink-0 p-3 bg-white/10 backdrop-blur-md rounded-full border border-white/10 hover:bg-white/20 transition-all shadow-xl group">
                 <ArrowLeft className="w-6 h-6 text-white group-hover:-translate-x-1 transition-transform" />
               </motion.button>
-              <SearchBar service={service} mode={mode} onSelect={place => { lastAiPlace.current = place; mapRef.current?.showPlace(place); }} />
+              <SearchBar service={service} mode={mode} onSearchStart={() => mapRef.current?.dismissDetails()} onSelect={place => { lastAiPlace.current = place; mapRef.current?.showPlace(place); }} />
               {!isDirectionsMode && (
                 <motion.button aria-label="Chỉ đường" onClick={() => { setIsDirectionsMode(true); if (isMobile) setIsChatCollapsed(true); }} className="shrink-0 flex items-center gap-2 px-3 md:px-4 py-3 bg-white hover:bg-slate-100 text-slate-950 rounded-full shadow-xl font-black text-[9px] uppercase tracking-[0.15em] transition-all border border-white/20">
                   <Navigation size={18} className="text-blue-600" /> <span className="hidden md:inline">Chỉ đường</span>
@@ -428,7 +434,7 @@ const MapPage = () => {
                 <span className="hidden sm:inline">· {ready ? 'Đà Nẵng sẵn sàng' : resource.data ? 'Dữ liệu đã lưu' : resource.status === 'installing' ? `Đang tải ${resource.progress}%` : 'Chưa có gói'}</span>
               </button>
               <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => setDataOpen(true)} aria-label="Quản lý dữ liệu bản đồ"><Database size={16} />Dữ liệu</button>
-              <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => setSavedOpen(true)}><Heart size={16} />Đã lưu / Gần đây</button>
+              <button className="community-secondary shrink-0 bg-slate-950/90" onClick={() => { mapRef.current?.dismissDetails(); setSavedOpen(true); }}><Heart size={16} />Đã lưu / Gần đây</button>
               <button className="community-secondary shrink-0 bg-slate-950/90" disabled={authLoading || (mode === 'offline' && !user)} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.startContribution(); }}>+ Thêm địa điểm</button>
               <button className="community-secondary shrink-0 bg-slate-950/90" disabled={authLoading || mode === 'offline'} onClick={() => { if (!user) { navigate('/login', { state: { from: location } }); return; } setIsChatCollapsed(true); mapRef.current?.dismissDetails(); setShowContributions(true); }}>Đóng góp của tôi</button>
               <button aria-label="Làm mới địa điểm MapAI" className="community-secondary shrink-0 bg-slate-950/90" onClick={() => window.dispatchEvent(new Event('mapai:places-changed'))}>Làm mới</button>
@@ -529,16 +535,16 @@ const MapPage = () => {
                         }`}>
                           {msg.text}
                           {msg.places?.length > 0 && <div className="mt-3 space-y-2">
-                            {msg.places.map(place => <button key={place.id} className="w-full text-left p-3 rounded-xl bg-blue-500/10 border border-blue-400/20 text-xs" onClick={() => {
-                              lastAiPlace.current = place;
-                              mapRef.current?.dismissDetails();
-                              mapRef.current?.flyTo({ center: [place.lng, place.lat], zoom: 17, showMarker: false });
-                              mapRef.current?.showPlace({ ...place, id: place.localId ? place.id : place.locationId || (place.source === 'osm' ? undefined : place.id) });
-                              if (isMobile) setIsChatCollapsed(true);
-                            }}>
-                              <span className="block font-semibold">{place.name}</span>
-                              <span className="block text-slate-400">{place.distanceMeters >= 1000 ? `${(place.distanceMeters / 1000).toFixed(1)} km` : `${Math.round(place.distanceMeters)} m`} đường thẳng · {place.source === 'offline' ? 'Gói Đà Nẵng' : place.source === 'mapai' ? 'MapAI' : 'OpenStreetMap'}</span>
-                            </button>)}
+                            {msg.places.map(place => <article key={place.canonicalId || place.id} className="p-3 rounded-xl bg-blue-500/10 border border-blue-400/20 text-xs space-y-2">
+                              <div className="flex gap-2 items-center"><div className="p-3 rounded-lg bg-indigo-500/15 text-indigo-300"><PlaceAvatar place={place} size={24} /></div><div className="min-w-0"><span className="block font-semibold">{place.name}</span><SourceBadge place={place} /></div></div>
+                              {Number.isFinite(place.distanceMeters) && <p className="text-slate-400">{place.distanceMeters >= 1000 ? `${(place.distanceMeters / 1000).toFixed(1)} km` : `${Math.round(place.distanceMeters)} m`} đường thẳng</p>}
+                              <div className="flex flex-wrap gap-2"><button className="community-secondary text-xs" onClick={() => {
+                                lastAiPlace.current = place; mapRef.current?.dismissDetails();
+                                mapRef.current?.flyTo({ center: [place.lng, place.lat], zoom: 17, showMarker: false });
+                                mapRef.current?.showPlace(place); if (isMobile) setIsChatCollapsed(true);
+                              }}>Mở trên bản đồ</button><button className="community-secondary text-xs" onClick={() => { lastAiPlace.current = place; mapRef.current?.startDirections(place); if (isMobile) setIsChatCollapsed(true); }}>Chỉ đường</button></div>
+                              {place.sourceType === 'openstreetmap' && <p className="text-[10px] text-slate-400">Thông tin lưu trên thiết bị; đường offline phụ thuộc phạm vi gói đã tải.</p>}
+                            </article>)}
                           </div>}
                           {msg.location && msg.location.address && (
                             <motion.button 

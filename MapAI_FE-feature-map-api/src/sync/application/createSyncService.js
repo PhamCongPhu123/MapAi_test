@@ -44,11 +44,11 @@ export function createSyncService({ repository, remote, clock, identity, connect
     await repository.undoFavorite(owner, undo, clock.now(), clock.id());
     if (undo.owner === owner) { publish({ undo: null }); await refresh(); }
   }
-  async function queue(kind, payload, { locationId = null, photo = null, photoName = null, operationId = null, expectedOwner = identity.owner() } = {}) {
+  async function queue(kind, payload, { locationId = null, place = null, photo = null, photoName = null, operationId = null, expectedOwner = identity.owner() } = {}) {
     await activate(identity.owner());
     if (expectedOwner !== owner) throw new Error('Tài khoản đã thay đổi. Bản nháp vẫn được giữ trong tài khoản ban đầu.');
     if (owner === 'guest') throw new Error('Hãy đăng nhập khi có mạng để gắn bản nháp vào tài khoản.');
-    const job = { owner, id: operationId || clock.id(), kind, payload, locationId, photo, photoName, createdAt: clock.now(), notBefore: clock.now(), attempts: 0 };
+    const job = { owner, id: operationId || clock.id(), kind, payload, locationId, ...(place ? { place: savedSnapshot(place) } : {}), photo, photoName, createdAt: clock.now(), notBefore: clock.now(), attempts: 0 };
     job.key = `${owner}|${kind === 'contribution' ? job.id : `review:${locationId}`}`;
     await repository.enqueue(job); await refresh(); return job;
   }
@@ -61,7 +61,7 @@ export function createSyncService({ repository, remote, clock, identity, connect
       if (typeof result.payload !== 'string' || result.payload.length > 20 * 1024 * 1024 || await checksum(result.payload) !== result.sha256 || result.version !== result.sha256)
         throw new Error('Gói địa điểm mới không toàn vẹn. Dữ liệu cũ vẫn được giữ.');
       const places = JSON.parse(result.payload);
-      if (!Array.isArray(places) || places.some(p => !p.id || p.source !== 'mapai' || p.key !== `mapai:${p.id}`)) throw new Error('Gói địa điểm không hợp lệ.');
+      if (!Array.isArray(places) || places.some(p => !p.id || p.source !== 'mapai' || (p.key !== `mapai:${p.id}` && !(p.sourceType === 'openstreetmap' && p.key === `osm:${p.osmType}:${p.osmId}`)))) throw new Error('Gói địa điểm không hợp lệ.');
       places.forEach(savedSnapshot);
       await repository.replaceCatalog({ version: result.version, checkedAt: clock.now() }, places);
     } else await repository.touchCatalog(clock.now());
@@ -88,8 +88,8 @@ export function createSyncService({ repository, remote, clock, identity, connect
               job.payload = { ...job.payload, thumbnail };
               await repository.updateUpload(job, thumbnail);
             }
-            await remote.push(job, current);
-            await repository.ack(job);
+            const receipt = await remote.push(job, current);
+            await repository.ack(job, receipt);
           } catch (error) {
             await repository.fail(job, { error: error.message, blocked: error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status),
               attempts: (job.attempts || 0) + 1, notBefore: clock.now() + Math.min(300000, 5000 * 2 ** Math.min(job.attempts || 0, 6)) });

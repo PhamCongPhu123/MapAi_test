@@ -1,3 +1,4 @@
+import { osmIdentity, unifiedPlace, validPlace } from '../../places/application/unifiedPlace.js';
 // Business/use-case layer. All storage, network, native and worker operations are injected ports.
 export function createOfflineService({ repository, source, checksum, connectivity, storage, router, location, personal }) {
   let installing, loadedGraph;
@@ -26,7 +27,10 @@ export function createOfflineService({ repository, source, checksum, connectivit
       const graph = JSON.parse(await assets.find(a => a.path === 'roads.json').blob.text());
       if (!places.length || !graph.nodes?.length || !graph.edges?.length || !assets.some(a => a.path === 'danang.pmtiles')) throw new Error('Gói thiếu bản đồ, địa điểm hoặc mạng lưới đường.');
       const pkg = { ...manifest, installedAt: Date.now(), placeCount: places.length };
-      await repository.replacePackage(pkg, places, assets);
+      const osmIndex = assets.find(a => a.path === 'osm-pois.json');
+      const osmPlaces = osmIndex ? JSON.parse(await osmIndex.blob.text()).places : [];
+      if (manifest.osmIndex && (!Array.isArray(osmPlaces) || osmPlaces.length !== manifest.osmIndex.count || osmPlaces.some(p => !osmIdentity(p) || !validPlace(p) || p.lng < manifest.bounds[0] || p.lng > manifest.bounds[2] || p.lat < manifest.bounds[1] || p.lat > manifest.bounds[3]))) throw new Error('Chỉ mục tiện ích OSM không hợp lệ.');
+      await repository.replacePackage(pkg, places, assets, osmPlaces.map(unifiedPlace));
       loadedGraph = graph;
       return pkg;
     })().finally(() => { installing = undefined; });

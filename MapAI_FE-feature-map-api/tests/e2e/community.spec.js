@@ -20,6 +20,10 @@ async function setup(page) {
     const respond = (json, status = 200) => route.fulfill({ status, json, headers: { 'access-control-allow-origin': '*' } });
     const noContent = () => route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } });
     if (path === '/auth/me') return respond(state.actor);
+    if (path === '/map/unified-search') {
+      const q = (url.searchParams.get('q') || '').toLowerCase();
+      return respond({ places: state.places.filter(p => p.title.toLowerCase().includes(q)).map(p => ({ ...p, canonicalId: `mapai:${p.id}`, mapaiId: p.id, sourceType: p.isUserContribution ? 'mapai_community' : 'mapai_curated', name: p.title, lat: p.latitude, lng: p.longitude })), warnings: ['OpenStreetMap tạm thời không khả dụng; đang hiển thị dữ liệu MapAI.'], sourceStatus: { mapai: 'ok', osm: 'unavailable' } });
+    }
     if (path.startsWith('/map/')) return respond({ message: 'External search unavailable' }, 503);
     if (path === '/location/upload-thumbnail' && method === 'POST') {
       state.uploads++;
@@ -190,7 +194,7 @@ test('duplicate proposal reports an error and keeps entered details', async ({ p
 test('approved local places remain searchable when external map search fails', async ({ page }) => {
   await setup(page);
   await page.goto('/map');
-  await page.getByPlaceholder('Tìm địa điểm, địa chỉ...').fill('Cộng Đồng');
+  await page.getByRole('textbox', { name: 'Tìm địa điểm, địa chỉ', exact: true }).fill('Cộng Đồng');
   await page.getByRole('button', { name: /Quán Cộng Đồng/ }).click();
   await expect(page).toHaveURL(/placeId=cafe-1/);
   await expect(page.locator('.place-detail-card').getByRole('heading', { name: 'Quán Cộng Đồng', exact: true })).toBeVisible();

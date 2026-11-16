@@ -29,6 +29,7 @@ namespace MapAI.API.Controllers
                 var result = await _aiService.AskMapAIAsync(request);
                 return Ok(result);
             }
+            catch (HttpRequestException) { return StatusCode(503, new { code = "PLACE_SEARCH_UNAVAILABLE", message = "Nguồn tìm kiếm địa điểm đang gián đoạn. Hãy thử lại sau." }); }
             catch (AiProviderException ex)
             {
                 return StatusCode(ex.StatusCode, new { code = ex.Code, message = ex.Message });

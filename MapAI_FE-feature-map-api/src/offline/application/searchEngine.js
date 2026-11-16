@@ -15,7 +15,7 @@ export const inBounds = (point, bounds) => point && Number.isFinite(point.lng) &
 
 export function createSearchEngine(places) {
   const indexed = places.map(p => ({ ...p, searchName: normalize(p.name),
-    searchTags: normalize(p.tags.join(' ')), searchArea: normalize(`${p.district} ${p.address}`) }));
+    searchTags: normalize((p.tags || []).join(' ')), searchArea: normalize(`${p.district} ${p.address}`) }));
   const fuse = new Fuse(indexed, { includeScore: true, threshold: 0.32, ignoreLocation: true, minMatchCharLength: 2,
     keys: [{ name: 'searchName', weight: 0.5 }, { name: 'searchTags', weight: 0.35 }, { name: 'searchArea', weight: 0.15 }] });
   return ({ query = '', category = 'all', district = 'Tất cả', center = CENTER, ids } = {}) => {

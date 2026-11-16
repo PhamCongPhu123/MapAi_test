@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MapAI.Domain.Models.Sync;
 
@@ -8,6 +9,11 @@ public sealed class SavedPlace
 {
     [Required, StringLength(200)] public string Key { get; set; } = "";
     [StringLength(200)] public string? Id { get; set; }
+    [StringLength(200)] public string? CanonicalId { get; set; }
+    [StringLength(50)] public string? SourceType { get; set; }
+    [StringLength(8)] public string? OsmType { get; set; }
+    [StringLength(20)] public string? OsmId { get; set; }
+    [StringLength(200)] public string? MapaiId { get; set; }
     [StringLength(200)] public string? LocalId { get; set; }
     [Required, StringLength(255)] public string Name { get; set; } = "";
     [Range(-90, 90)] public double Lat { get; set; }
@@ -29,8 +35,10 @@ public sealed class SyncOperation
     [Required, RegularExpression("^(favorite|contribution|review|review-delete)$")]
     public string Kind { get; set; } = "";
     public JsonElement Payload { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SavedPlace? Place { get; set; }
     [StringLength(200)] public string? LocationId { get; set; }
 }
-public sealed record SyncReceipt(Guid Id, string Kind, string? ResourceId);
+public sealed record SyncReceipt(Guid Id, string Kind, string? ResourceId, string? MapaiLocationId = null);
 public sealed record FavoriteRecord(SavedPlace Place, bool Deleted, DateTimeOffset UpdatedAt);
 public sealed record PublicCatalog(string Version, string Sha256, string Payload);

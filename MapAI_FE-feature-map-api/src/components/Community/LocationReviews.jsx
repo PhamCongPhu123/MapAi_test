@@ -6,10 +6,12 @@ import { useNetworkStatus } from '../../offline/network';
 import { useSyncStatus } from '../../sync/presentation/useSyncStatus';
 import { communityApi } from '../../services/communityService';
 
-export default function LocationReviews({ locationId }) {
+export default function LocationReviews({ locationId, place }) {
   const { user } = useAuth();
   const { offline } = useNetworkStatus();
-  const { owner } = useSyncStatus();
+  const { owner, references = {} } = useSyncStatus();
+  const isOsm = place?.sourceType === 'openstreetmap';
+  const resolvedId = isOsm ? references[place.canonicalId] || place.mapaiId : locationId;
   const [data, setData] = useState(null);
   const [page, setPage] = useState(1);
   const [rating, setRating] = useState(0);
@@ -22,9 +24,9 @@ export default function LocationReviews({ locationId }) {
   const dirty = useRef(false);
   const load = useCallback(async (signal, resetForm = false) => {
     try {
-      const result = offline ? (await syncService.loadDraft('review-cache', locationId, owner))?.data || { items: [], myReview: null, totalCount: 0, averageRating: null, pageSize: 10 }
-        : await communityApi.reviews(locationId, page, signal);
-      if (!offline && !signal?.aborted) await syncService.saveDraft('review-cache', locationId, { data: result }, owner);
+      const result = offline || !resolvedId ? (await syncService.loadDraft('review-cache', locationId, owner))?.data || { items: [], myReview: null, totalCount: 0, averageRating: null, pageSize: 10 }
+        : await communityApi.reviews(resolvedId, page, signal);
+      if (!offline && resolvedId && !signal?.aborted) await syncService.saveDraft('review-cache', locationId, { data: result }, owner);
       if (signal?.aborted) return;
       if (page > 1 && result.items.length === 0) { setPage(Math.max(1, Math.ceil(result.totalCount / result.pageSize))); return; }
       setData(result);
@@ -37,7 +39,7 @@ export default function LocationReviews({ locationId }) {
       }
       setError('');
     } catch (error) { if (!signal?.aborted) setError(error.message); }
-  }, [locationId, page, offline, owner]);
+  }, [locationId, resolvedId, page, offline, owner]);
   useEffect(() => { initialized.current = false; setData(null); }, [owner, locationId]);
   useEffect(() => {
     const controller = new AbortController();
@@ -62,11 +64,12 @@ export default function LocationReviews({ locationId }) {
     setBusy(true);
     setNotice('');
     try {
-      if (offline) {
-        await syncService.queue('review', { rating, comment: comment.trim() }, { locationId, expectedOwner: owner });
+      if (offline || isOsm) {
+        await syncService.queue('review', { rating, comment: comment.trim() }, { locationId, place, expectedOwner: owner });
         dirty.current = false;
         await syncService.clearDraft('review', locationId, owner);
-        setNotice('Đã lưu đánh giá trên máy. Sẽ tự gửi khi có mạng.');
+        if (!offline) { await syncService.sync({ manual: true }); await load(undefined, true); }
+        setNotice(offline ? 'Đã lưu đánh giá trên máy. Sẽ tự gửi khi có mạng.' : syncService.getSnapshot().error || 'Đã gửi yêu cầu đồng bộ đánh giá.');
         return;
       }
       await communityApi.saveReview(locationId, { rating, comment: comment.trim() });
@@ -84,10 +87,10 @@ export default function LocationReviews({ locationId }) {
     setNotice('');
     try {
       if (offline) {
-        await syncService.queue('review-delete', {}, { locationId, expectedOwner: owner });
+        await syncService.queue('review-delete', {}, { locationId: resolvedId, expectedOwner: owner });
         setConfirmDelete(false); setNotice('Yêu cầu xóa đánh giá đang chờ đồng bộ.'); return;
       }
-      await communityApi.deleteReview(locationId);
+      await communityApi.deleteReview(resolvedId);
       setConfirmDelete(false);
       setRating(0);
       setComment('');

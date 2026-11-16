@@ -5,6 +5,10 @@ namespace MapAI.Domain.Models.Location
     public class LocationResponse
     {
         public string Id { get; set; } = null!;
+        public string? CanonicalId { get; set; }
+        public string? SourceType { get; set; }
+        public string? OsmType { get; set; }
+        public string? OsmId { get; set; }
         public string Title { get; set; } = null!;
         public string? PlaceId { get; set; }
         public string? Address { get; set; }

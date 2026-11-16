@@ -126,7 +126,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       el.className = 'relative flex items-center justify-center cursor-pointer group';
       
       // Determine config based on category or default
-      const category = place.categories?.[0]?.name?.toLowerCase() || '';
+      const category = place.categoryMapping || place.categories?.[0]?.name?.toLowerCase() || '';
       let config = CATEGORY_CONFIG.default;
       
       if (category.includes('coffee') || category.includes('cafe') || category.includes('tea')) {
@@ -151,7 +151,8 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
         config = CATEGORY_CONFIG.park;
       }
 
-      const color = config?.color || CATEGORY_CONFIG.default.color;
+      const external = place.sourceType === 'openstreetmap' || place.source === 'osm';
+      const color = external ? '#4f46e5' : config?.color || CATEGORY_CONFIG.default.color;
 
       el.innerHTML = `
         <div class="absolute w-12 h-12 bg-white/20 rounded-full scale-0 group-hover:scale-110 transition-transform duration-300 shadow-2xl"></div>
@@ -165,6 +166,8 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
         </svg>
       `;
 
+      if (external) el.innerHTML = '<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="#4f46e5" stroke="white" stroke-width="3"/><circle cx="14" cy="14" r="3" fill="white"/></svg>';
+      el.setAttribute('aria-label', place.name);
       const marker = new maplibregl.Marker({ 
         element: el,
         anchor: 'bottom'
@@ -173,8 +176,8 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
         .addTo(map.current);
 
       const popupContent = createPlacePopup(place,
-        () => window.showPlaceDetails?.(place.name, place.lng, place.lat, place.locationId),
-        () => window.startDirectionsFromPopup?.(place.name, place.lng, place.lat));
+        () => window.showUnifiedPlace?.(place),
+        () => window.startUnifiedDirections?.(place));
 
       const popup = new maplibregl.Popup({ offset: [0, -10], closeButton: true, className: 'custom-search-popup' })
         .setDOMContent(popupContent);
@@ -381,7 +384,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     },
     showPlace: place => { openedQuery.current = place.id || null; return openPlace(place); },
     startDirections: place => handleStartDirectionsFromPanel(place),
-    dismissDetails: () => { setSelectedPlace(null); setShowLocationPopup(false); },
+    dismissDetails: () => { openedQuery.current = searchParams.get('placeId'); detailRequest.current++; setSelectedPlace(null); setShowLocationPopup(false); },
     startContribution: () => {
       if (pickingRef.current) return;
       if (!user) { addToast('Hãy đăng nhập khi có mạng để gắn bản nháp vào tài khoản.', 'info'); return; }
@@ -589,7 +592,7 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
     if (currentMap.getSource(sourceId)) return;
     currentMap.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     currentMap.addLayer({ id: layerId, type: 'circle', source: sourceId,
-      paint: { 'circle-radius': 9, 'circle-color': '#8b5cf6', 'circle-stroke-width': 3, 'circle-stroke-color': '#fff' } });
+      paint: { 'circle-radius': ['case', ['==', ['get', 'sourceType'], 'openstreetmap'], 7, 9], 'circle-color': ['case', ['==', ['get', 'sourceType'], 'openstreetmap'], '#4f46e5', '#0d9488'], 'circle-stroke-width': 3, 'circle-stroke-color': '#fff' } });
     const refresh = async () => {
       try {
         const places = await mapService.list(controller.signal);
@@ -702,6 +705,8 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
   }, [addToast, removeToast, clearRoute, mapService]);
 
   useEffect(() => {
+    window.showUnifiedPlace = place => openPlace(place);
+    window.startUnifiedDirections = place => handleStartDirectionsFromPanel(place);
     window.showPlaceDetails = (name, lng, lat, id) => id ? openStoredPlace(id) : handleShowDetails(name, [lng, lat]);
     window.startDirectionsFromPopup = (name, lng, lat) => {
       const savedLoc = sessionStorage.getItem('user_location');
@@ -709,8 +714,8 @@ const MapLibreView = ({ mapRef, isDirectionsMode, setIsDirectionsMode, isNavigat
       setInitialDestination({ name, lng, lat });
       setIsDirectionsMode(true);
     };
-    return () => { delete window.showPlaceDetails; delete window.startDirectionsFromPopup; };
-  }, [handleShowDetails, openStoredPlace, setIsDirectionsMode]);
+    return () => { delete window.showPlaceDetails; delete window.startDirectionsFromPopup; delete window.showUnifiedPlace; delete window.startUnifiedDirections; };
+  }, [openPlace, handleStartDirectionsFromPanel, handleShowDetails, openStoredPlace, setIsDirectionsMode]);
 
   useEffect(() => {
     const handleAISetDestination = (e) => {

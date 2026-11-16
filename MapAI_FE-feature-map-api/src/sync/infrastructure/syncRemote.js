@@ -12,7 +12,7 @@ async function call(path, options = {}, owner) {
 }
 export const syncRemote = {
   async push(job, owner) {
-    const receipt = await call('operations', { method: 'POST', body: JSON.stringify({ id: job.id, kind: job.kind, locationId: job.locationId, payload: job.payload }) }, owner);
+    const receipt = await call('operations', { method: 'POST', body: JSON.stringify({ id: job.id, kind: job.kind, locationId: job.locationId, payload: job.payload, ...(job.place ? { place: job.place } : {}) }) }, owner);
     if (receipt?.id !== job.id || receipt.kind !== job.kind) throw new Error('Máy chủ chưa xác nhận thao tác. Dữ liệu vẫn chờ đồng bộ.');
     return receipt;
   },

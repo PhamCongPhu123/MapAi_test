@@ -15,12 +15,13 @@ namespace MapAI.Application.Services
         private readonly IAiRepository _aiRepository;
         private readonly IMapService _mapService;
         private readonly ILogger<AiService> _logger;
+        private readonly IUnifiedPlaceService? _places;
 
-        public AiService(IAiRepository aiRepository, IMapService mapService, ILogger<AiService> logger)
+        public AiService(IAiRepository aiRepository, IMapService mapService, ILogger<AiService> logger, IUnifiedPlaceService? places = null)
         {
             _aiRepository = aiRepository;
             _mapService = mapService;
-            _logger = logger;
+            _logger = logger; _places = places;
         }
 
         public async Task<AiFinalResponse> AskMapAIAsync(AiRequest request)
@@ -29,6 +30,14 @@ namespace MapAI.Application.Services
             {
                 // TẦNG 1: ROUTER - Phân loại ý định
                 var route = MapCommandRouter.TryParse(request.UserInput);
+                if (route == null && _places != null)
+                {
+                    var text = MapAI.Domain.Models.Places.UnifiedPlaceRules.Normalize(request.UserInput);
+                    var utility = MapPlaceCategories.All.SelectMany(c => c.Aliases.Append(c.Id).Append(MapAI.Domain.Models.Places.UnifiedPlaceRules.Normalize(c.Name))).Any(a => (" " + text + " ").Contains(" " + a + " "));
+                    var explainer = System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(gioi thieu|lich su|vi sao|tai sao|ke ve)\b");
+                    if (utility && !explainer)
+                        return await SearchPlacesAsync(System.Text.RegularExpressions.Regex.Replace(text, @"^(toi muon |hay |vui long )*(tim giup toi |tim cho toi |tim |cho toi |chi duong den |chi duong toi |dan duong den |dan duong toi |duong den )", ""), text.Contains("chi duong") || text.Contains("dan duong"));
+                }
                 if (route == null)
                 {
                     var routerJson = await _aiRepository.CallGeminiAsync(
@@ -96,6 +105,8 @@ namespace MapAI.Application.Services
         private async Task<AiFinalResponse> HandleActionMapAsync(RouterResponse route, AiRequest request)
         {
             var type = route.ActionType;
+            if (_places != null && type is "Location" or "Direction" or "CityWide")
+                return await SearchPlacesAsync(route.TargetLocation ?? route.SearchQuery ?? request.UserInput, type == "Direction");
 
             var cameraActions = new Dictionary<string, string>
             {
@@ -251,6 +262,20 @@ namespace MapAI.Application.Services
             }
 
             return ErrorResponse();
+        }
+
+        private async Task<AiFinalResponse> SearchPlacesAsync(string query, bool directions)
+        {
+            var result = await _places!.SearchAsync(query);
+            var first = result.Places.FirstOrDefault();
+            return new() {
+                Message = first == null ? "Chưa tìm thấy địa điểm phù hợp tại Đà Nẵng. Bạn thử tên cụ thể hơn nhé."
+                    : first.SourceType == "openstreetmap" ? "Mình tìm thấy địa điểm từ bản đồ mở OpenStreetMap."
+                    : "Mình tìm thấy các địa điểm từ dữ liệu MapAI và OpenStreetMap.",
+                Places = result.Places, Warnings = result.Warnings,
+                Action = directions && first != null ? new() { Type = "LOCAL_DIRECTIONS", Value = first } : null,
+                Suggestions = ["Chỉ đường đến đó", "Xóa kết quả tìm kiếm"]
+            };
         }
 
         private AiFinalResponse ErrorResponse()

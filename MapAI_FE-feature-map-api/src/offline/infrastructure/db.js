@@ -21,6 +21,11 @@ db.version(2).stores({
   }
 });
 
+db.version(3).stores({
+  osmPois: 'canonicalId, normalizedName, categoryMapping',
+  osmCache: 'canonicalId, normalizedName, categoryMapping, cachedAt',
+});
+
 // Favorites/history belong to this browser, independently of online accounts.
 export async function toggleFavorite(placeId) {
   await db.transaction('rw', db.favorites, async () => {

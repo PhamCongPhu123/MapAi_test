@@ -7,7 +7,10 @@ export function createPlacePopup(place, onDetails, onDirections) {
   const address = document.createElement('p');
   address.className = 'text-xs text-slate-400 mb-3';
   address.textContent = place.displayName || place.address || place.location?.formattedAddress || '';
-  container.append(title, address);
+  const source = document.createElement('span');
+  source.className = 'source-badge ' + (place.sourceType === 'openstreetmap' || place.source === 'osm' ? 'source-osm' : 'source-mapai');
+  source.textContent = place.sourceType === 'openstreetmap' || place.source === 'osm' ? 'OSM' : 'MapAI';
+  container.append(title, source, address);
   const actions = document.createElement('div');
   actions.className = 'flex gap-2';
   for (const [label, handler] of [['Chi tiết', onDetails], ['Đường đi', onDirections]]) {

@@ -110,7 +110,8 @@ const assets = fs.readdirSync(out, { recursive: true }).filter(p => p !== 'manif
   const content = fs.readFileSync(path.join(out, p)); return { path: p.split(path.sep).join('/'), bytes: content.length, sha256: sha(content) };
 });
 fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({
-  id: 'danang', version: '2026.11.14.2', mapProvider: 'openfreemap', mapStyle: 'Liberty', bounds,
+  id: 'danang', version: fs.existsSync(path.join(out, 'osm-pois.json')) ? '2026.11.16.1' : '2026.11.14.2',
+  ...(fs.existsSync(path.join(out, 'osm-pois.json')) ? { osmIndex: (() => { const index = JSON.parse(fs.readFileSync(path.join(out, 'osm-pois.json'))); return { count: index.places.length, bounds: index.bounds, sourceDate: index.sourceDate }; })() } : {}), mapProvider: 'openfreemap', mapStyle: 'Liberty', bounds,
   sourceDate: '2026-05-26', tileSource: template, tileCount: tiles.length,
   attribution: tilejson.attribution, assets, bytes: assets.reduce((n, a) => n + a.bytes, 0),
 }, null, 2));

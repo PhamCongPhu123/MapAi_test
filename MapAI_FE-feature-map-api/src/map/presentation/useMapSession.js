@@ -5,6 +5,7 @@ import { offlineService } from '../../offline/compositionRoot';
 import { createMapService } from '../application/createMapService';
 import { remoteMapRepository } from '../infrastructure/remoteMapRepository';
 import { usePwaStatus } from '../../offline/pwa';
+import { placeCacheRepository } from '../../places/infrastructure/placeCacheRepository';
 import { isNative } from '../../config/platform';
 
 // Composition hook: a stable service and one mounted workspace across connectivity changes.
@@ -17,7 +18,7 @@ export function useMapSession() {
   const [runtime] = useState(() => {
     let snapshot = { mode, data: resource.data };
     const service = createMapService({ remote: remoteMapRepository, local: offlineService,
-      getMode: () => snapshot.mode, getLocalData: () => snapshot.data });
+      cache: placeCacheRepository, getMode: () => snapshot.mode, getLocalData: () => snapshot.data });
     return { service, update: next => { snapshot = next; } };
   });
   useLayoutEffect(() => { runtime.update({ mode, data: resource.data }); }, [runtime, mode, resource.data]);

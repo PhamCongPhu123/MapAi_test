@@ -47,7 +47,7 @@ test('email login calls existing API and returns to requested map', async ({ pag
   await page.locator('form').getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   expect((await login).postDataJSON()).toEqual({ email: user.email, password: 'test-only-password' });
   await expect(page).toHaveURL(/\/map\?lat=16\.0544&lng=108\.2022$/);
-  await expect(page.getByPlaceholder('Tìm địa điểm, địa chỉ...')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Tìm địa điểm, địa chỉ', exact: true })).toBeVisible();
 });
 
 test('map chat opens, closes and handles Back before navigation', async ({ page }, testInfo) => {
@@ -68,7 +68,7 @@ test('map chat opens, closes and handles Back before navigation', async ({ page 
     await page.getByRole('button', { name: 'Đóng trợ lý AI' }).click();
     await expect(page.getByRole('button', { name: 'Mở trợ lý AI' })).toBeVisible();
   }
-  const search = await page.getByPlaceholder('Tìm địa điểm, địa chỉ...').boundingBox();
+  const search = await page.getByRole('textbox', { name: 'Tìm địa điểm, địa chỉ', exact: true }).boundingBox();
   expect(search.x).toBeGreaterThanOrEqual(0);
   expect(search.x + search.width).toBeLessThanOrEqual(page.viewportSize().width);
 });

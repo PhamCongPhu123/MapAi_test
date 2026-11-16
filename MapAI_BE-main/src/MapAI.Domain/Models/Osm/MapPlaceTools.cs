@@ -19,6 +19,10 @@ public static class MapPlaceCategories
     // Filters are application constants; user/model text is never interpolated into Overpass QL.
     public static readonly IReadOnlyList<MapPlaceCategory> All = new[]
     {
+        new MapPlaceCategory("bus", "Trạm xe buýt", ["[\"highway\"=\"bus_stop\"]", "[\"amenity\"=\"bus_station\"]", "[\"public_transport\"=\"platform\"]"], ["ben xe buyt", "tram xe buyt", "ben xe bus", "tram xe bus", "bus stop", "bus station"]),
+        new MapPlaceCategory("university", "Trường đại học", ["[\"amenity\"=\"university\"]", "[\"amenity\"=\"college\"]"], ["truong dai hoc", "dai hoc", "college"]),
+        new MapPlaceCategory("school", "Trường học", ["[\"amenity\"=\"school\"]", "[\"amenity\"=\"kindergarten\"]"], ["truong hoc"]),
+        new MapPlaceCategory("clinic", "Cơ sở y tế", ["[\"amenity\"=\"clinic\"]", "[\"amenity\"=\"doctors\"]"], ["tram y te", "phong kham"]),
         new MapPlaceCategory("fuel", "Cây xăng", ["[\"amenity\"=\"fuel\"]"], ["cay xang", "tram xang", "gas station", "petrol station", "fuel station", "gas", "petrol"]),
         new MapPlaceCategory("atm", "ATM", ["[\"amenity\"=\"atm\"]", "[\"amenity\"=\"bank\"][\"atm\"=\"yes\"]"], ["may rut tien", "rut tien", "atm ngan hang"]),
         new MapPlaceCategory("pharmacy", "Nhà thuốc", ["[\"amenity\"=\"pharmacy\"]"], ["nha thuoc", "hieu thuoc", "drugstore"]),

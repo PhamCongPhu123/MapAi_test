@@ -45,6 +45,7 @@ export async function attachServer(page, server, account) {
       return respond({ payload: server.catalogCorrupt ? payload + ' ' : payload, version: sha256, sha256 });
     }
     if (path === '/location/upload-thumbnail') { server.uploads++; return respond({ url: 'https://images.example.test/queued.jpg' }); }
+    if (path === '/map/unified-search') return respond({ places: [], warnings: [], sourceStatus: { mapai: 'ok', osm: 'ok' } });
     if (path === '/location' || path === '/map/search') return respond([]);
     if (path.endsWith('/reviews')) return respond({ items: [], myReview: null, totalCount: 0, pageSize: 10 });
     return respond([]);
