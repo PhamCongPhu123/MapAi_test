@@ -1,5 +1,7 @@
 # MapAI Authentication Integration Guide
 
+Hướng dẫn lấy code, cập nhật database đồng bộ và đổi Gmail gửi thư trên laptop/hosting/APK: [MAIL_SENDER_SETUP.md](MAIL_SENDER_SETUP.md).
+
 This document describes the authentication flow and API specifications for the MapAI project. The Backend (BE) follows a secure, session-aware JWT architecture with support for Refresh Tokens.
 
 ## Đăng ký và đăng nhập trên máy tính / điện thoại
